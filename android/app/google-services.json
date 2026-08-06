@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "86837758129",
+    "project_id": "bca-department-management",
+    "storage_bucket": "bca-department-management.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:86837758129:android:036ef8cfa24ecc7ba0ba90",
+        "android_client_info": {
+          "package_name": "com.example.bca_department_management"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBYXoVBIXQoHM73fI8k_MjQ4bb759S6or4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
