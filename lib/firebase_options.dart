@@ -32,46 +32,46 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyBd1F7ALKfsOORhtloAn9HdlmdSRWie8mA',
-    appId: '1:86837758129:web:84c21c18159dbdd2a0ba90',
-    messagingSenderId: '86837758129',
-    projectId: 'bca-department-management',
-    authDomain: 'bca-department-management.firebaseapp.com',
-    storageBucket: 'bca-department-management.firebasestorage.app',
-    measurementId: 'G-5SHQE82TEJ',
+    apiKey: 'AIzaSyBgipPKP7c5OGfMEgBLbW_tlZND76eon-g',
+    appId: '1:447716952637:web:d9b1b18c24151c5a01b854',
+    messagingSenderId: '447716952637',
+    projectId: 'bca-department-management-app',
+    authDomain: 'bca-department-management-app.firebaseapp.com',
+    storageBucket: 'bca-department-management-app.firebasestorage.app',
+    measurementId: 'G-JFK9GDFWK1',
   );
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyBYXoVBIXQoHM73fI8k_MjQ4bb759S6or4',
-    appId: '1:86837758129:android:036ef8cfa24ecc7ba0ba90',
-    messagingSenderId: '86837758129',
-    projectId: 'bca-department-management',
-    storageBucket: 'bca-department-management.firebasestorage.app',
+    apiKey: 'AIzaSyANryWJkbsSdsbLyQShg5itgq91DwCwFPM',
+    appId: '1:447716952637:android:798d0d2e6f0cd83301b854',
+    messagingSenderId: '447716952637',
+    projectId: 'bca-department-management-app',
+    storageBucket: 'bca-department-management-app.firebasestorage.app',
   );
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyBAlo_mR3zEzzmNTXlsjvaQGhYCBvXsfSI',
-    appId: '1:86837758129:ios:0eeb6734bcf9be36a0ba90',
-    messagingSenderId: '86837758129',
-    projectId: 'bca-department-management',
-    storageBucket: 'bca-department-management.firebasestorage.app',
+    apiKey: 'AIzaSyA71fOdMj8xaoNAWtci-nAHURa3EEbfbrQ',
+    appId: '1:447716952637:ios:fd2f13f420c8a0f701b854',
+    messagingSenderId: '447716952637',
+    projectId: 'bca-department-management-app',
+    storageBucket: 'bca-department-management-app.firebasestorage.app',
     iosBundleId: 'com.example.bcaDepartmentManagement',
   );
   static const FirebaseOptions macos = FirebaseOptions(
-    apiKey: 'AIzaSyBAlo_mR3zEzzmNTXlsjvaQGhYCBvXsfSI',
-    appId: '1:86837758129:ios:0eeb6734bcf9be36a0ba90',
-    messagingSenderId: '86837758129',
-    projectId: 'bca-department-management',
-    storageBucket: 'bca-department-management.firebasestorage.app',
+    apiKey: 'AIzaSyA71fOdMj8xaoNAWtci-nAHURa3EEbfbrQ',
+    appId: '1:447716952637:ios:fd2f13f420c8a0f701b854',
+    messagingSenderId: '447716952637',
+    projectId: 'bca-department-management-app',
+    storageBucket: 'bca-department-management-app.firebasestorage.app',
     iosBundleId: 'com.example.bcaDepartmentManagement',
   );
 
   static const FirebaseOptions windows = FirebaseOptions(
-    apiKey: 'AIzaSyBd1F7ALKfsOORhtloAn9HdlmdSRWie8mA',
-    appId: '1:86837758129:web:b7415757024aabaca0ba90',
-    messagingSenderId: '86837758129',
-    projectId: 'bca-department-management',
-    authDomain: 'bca-department-management.firebaseapp.com',
-    storageBucket: 'bca-department-management.firebasestorage.app',
-    measurementId: 'G-LTMN6EMJ5G',
+    apiKey: 'AIzaSyBgipPKP7c5OGfMEgBLbW_tlZND76eon-g',
+    appId: '1:447716952637:web:2c0139abb19da13f01b854',
+    messagingSenderId: '447716952637',
+    projectId: 'bca-department-management-app',
+    authDomain: 'bca-department-management-app.firebaseapp.com',
+    storageBucket: 'bca-department-management-app.firebasestorage.app',
+    measurementId: 'G-FM5E160ZNP',
   );
 }

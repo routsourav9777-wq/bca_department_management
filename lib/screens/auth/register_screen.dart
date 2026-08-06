@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/theme/app_theme.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -10,6 +12,9 @@ class RegisterScreen extends StatefulWidget {
 }
 
 class _RegisterScreenState extends State<RegisterScreen> {
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+
   String _semester = AppConstants.semesters[0];
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
@@ -21,7 +26,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 // bool _obscureConfirmPassword = true;
   bool _isLoading = false;
 
-  void _handleRegister() {
+  Future<void> _handleRegister() async {
     if (_nameController.text.trim().isEmpty) {
       _showError("Please enter your Full Name");
       return;
@@ -59,7 +64,30 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
     setState(() => _isLoading = true);
 
-    Future.delayed(const Duration(seconds: 1), () {
+    try {
+      // Create Firebase Authentication account
+      UserCredential userCredential =
+          await _auth.createUserWithEmailAndPassword(
+        email: _emailController.text.trim(),
+        password: _passwordController.text.trim(),
+      );
+
+      // Save student data in Firestore
+      await _firestore
+          .collection('students')
+          .doc(userCredential.user!.uid)
+          .set({
+        'uid': userCredential.user!.uid,
+        'name': _nameController.text.trim(),
+        'email': _emailController.text.trim(),
+        'phone': _phoneController.text.trim(),
+        'rollNo': _idController.text.trim(),
+        'semester': _semester,
+        'role': 'student',
+        'status': 'pending',
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+
       if (!mounted) return;
 
       setState(() => _isLoading = false);
@@ -67,14 +95,31 @@ class _RegisterScreenState extends State<RegisterScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            "Registration submitted successfully.\nPlease wait for HOD approval.",
+            "Registration Successful.\nWaiting for HOD Approval.",
           ),
           backgroundColor: Colors.green,
         ),
       );
 
       Navigator.pop(context);
-    });
+    } on FirebaseAuthException catch (e) {
+      setState(() => _isLoading = false);
+
+      String message = "Registration Failed";
+
+      if (e.code == 'email-already-in-use') {
+        message = "This email is already registered.";
+      } else if (e.code == 'weak-password') {
+        message = "Password should be at least 6 characters.";
+      } else if (e.code == 'invalid-email') {
+        message = "Invalid email address.";
+      }
+
+      _showError(message);
+    } catch (e) {
+      setState(() => _isLoading = false);
+      _showError(e.toString());
+    }
   }
 
   void _showError(String message) {

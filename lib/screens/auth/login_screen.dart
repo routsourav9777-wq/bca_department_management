@@ -4,6 +4,8 @@ import '../hod/hod_dashboard_screen.dart';
 import '../faculty/faculty_dashboard_screen.dart';
 import '../student/student_dashboard_screen.dart';
 import 'register_screen.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -13,40 +15,98 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
 
   bool _isLoading = false;
   bool _obscurePassword = true;
 
-  void _login() {
+  Future<void> _login() async {
+    if (_emailController.text.trim().isEmpty ||
+        _passwordController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Please enter email and password"),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
     setState(() => _isLoading = true);
 
-    Future.delayed(const Duration(milliseconds: 800), () {
-      if (!mounted) return;
+    try {
+      // Firebase Authentication
+      UserCredential userCredential = await _auth.signInWithEmailAndPassword(
+        email: _emailController.text.trim(),
+        password: _passwordController.text.trim(),
+      );
 
-      setState(() => _isLoading = false);
+      // Check HOD collection
+      final hodQuery = await _firestore
+          .collection('hod')
+          .where('email', isEqualTo: _emailController.text.trim())
+          .limit(1)
+          .get();
 
-      final email = _emailController.text.trim().toLowerCase();
+      debugPrint("Entered Email = ${_emailController.text.trim()}");
+      debugPrint("Docs Found = ${hodQuery.docs.length}");
 
-      Widget destination;
-
-      // Temporary Login
-      // Later replace with Firebase Authentication
-
-      if (email.contains("hod")) {
-        destination = const HODDashboardScreen();
-      } else if (email.contains("faculty")) {
-        destination = const FacultyDashboardScreen();
-      } else {
-        destination = const StudentDashboardScreen();
+      if (hodQuery.docs.isNotEmpty) {
+        debugPrint(hodQuery.docs.first.data().toString());
       }
 
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => destination),
+      if (hodQuery.docs.isNotEmpty) {
+        final data = hodQuery.docs.first.data();
+
+        if (data['status'] == 'active') {
+          if (!mounted) return;
+
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (_) => const HODDashboardScreen(),
+            ),
+          );
+          return;
+        }
+      }
+
+      await _auth.signOut();
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Access Denied"),
+          backgroundColor: Colors.red,
+        ),
       );
-    });
+    } on FirebaseAuthException catch (e) {
+      String message = "Login Failed";
+
+      if (e.code == 'user-not-found') {
+        message = "User not found";
+      } else if (e.code == 'wrong-password' || e.code == 'invalid-credential') {
+        message = "Invalid email or password";
+      }
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
   }
 
   @override
