@@ -7,10 +7,9 @@ import '../auth/login_screen.dart';
 import 'student_profile_screen.dart';
 import 'download_notes_screen.dart';
 import 'view_notices_screen.dart';
-import 'submit_assignments_screen.dart';
 import 'view_attendance_screen.dart';
-import 'view_internal_marks_screen.dart';
 import 'notifications_screen.dart';
+import 'scan_attendance_screen.dart';
 
 class StudentDashboardScreen extends StatefulWidget {
   const StudentDashboardScreen({super.key});
@@ -28,11 +27,10 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
 
   bool _loadingStudent = true;
 
-  String? _studentDocumentId;
-
   @override
   void initState() {
     super.initState();
+
     _loadStudent();
   }
 
@@ -50,6 +48,7 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
             _loadingStudent = false;
           });
         }
+
         return;
       }
 
@@ -71,8 +70,6 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
 
         if (mounted) {
           setState(() {
-            _studentDocumentId = doc.id;
-
             _studentData = doc.data();
 
             _loadingStudent = false;
@@ -101,8 +98,6 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
 
           if (mounted) {
             setState(() {
-              _studentDocumentId = doc.id;
-
               _studentData = doc.data();
 
               _loadingStudent = false;
@@ -116,6 +111,7 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
       if (mounted) {
         setState(() {
           _studentData = null;
+
           _loadingStudent = false;
         });
       }
@@ -168,12 +164,14 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
   }
 
   // ============================================================
-  // NOTIFICATION COUNT
+  // NOTIFICATION STREAM
   // ============================================================
 
   Stream<QuerySnapshot<Map<String, dynamic>>> _notificationStream() {
     return _firestore
-        .collection('notifications')
+        .collection(
+          'notifications',
+        )
         .where(
           'department',
           isEqualTo: 'BCA',
@@ -186,7 +184,9 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
   // ============================================================
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(
+    BuildContext context,
+  ) {
     return Scaffold(
       appBar: AppBar(
         title: const Column(
@@ -209,9 +209,9 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
           ],
         ),
         actions: [
-          // ======================================================
+          // ====================================================
           // NOTIFICATIONS
-          // ======================================================
+          // ====================================================
 
           StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
             stream: _notificationStream(),
@@ -263,9 +263,9 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
             },
           ),
 
-          // ======================================================
+          // ====================================================
           // PROFILE
-          // ======================================================
+          // ====================================================
 
           IconButton(
             icon: const Icon(
@@ -281,9 +281,9 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
             },
           ),
 
-          // ======================================================
+          // ====================================================
           // LOGOUT
-          // ======================================================
+          // ====================================================
 
           IconButton(
             icon: const Icon(
@@ -294,9 +294,9 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
         ],
       ),
 
-      // ==========================================================
+      // ========================================================
       // BODY
-      // ==========================================================
+      // ========================================================
 
       body: _loadingStudent
           ? const Center(
@@ -343,6 +343,16 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
                     ),
 
                     // ==========================================
+                    // TAKE ATTENDANCE CARD
+                    // ==========================================
+
+                    _buildTakeAttendanceCard(),
+
+                    const SizedBox(
+                      height: 20,
+                    ),
+
+                    // ==========================================
                     // SERVICES
                     // ==========================================
 
@@ -365,11 +375,11 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
                       physics: const NeverScrollableScrollPhysics(),
                       crossAxisSpacing: 12,
                       mainAxisSpacing: 12,
-                      childAspectRatio: 1.25,
+                      childAspectRatio: 1.05,
                       children: [
-                        // ======================================
+                        // ====================================
                         // NOTES
-                        // ======================================
+                        // ====================================
 
                         _buildActionCard(
                           title: 'Download Notes',
@@ -386,9 +396,9 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
                           },
                         ),
 
-                        // ======================================
+                        // ====================================
                         // NOTICES
-                        // ======================================
+                        // ====================================
 
                         _buildActionCard(
                           title: 'View Notices',
@@ -406,28 +416,9 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
                           },
                         ),
 
-                        // ======================================
-                        // ASSIGNMENTS
-                        // ======================================
-
-                        _buildActionCard(
-                          title: 'Submit Assignments',
-                          subtitle: 'Upload Homework & PDF',
-                          icon: Icons.upload_file,
-                          color: Colors.orange.shade800,
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => const SubmitAssignmentsScreen(),
-                              ),
-                            );
-                          },
-                        ),
-
-                        // ======================================
-                        // ATTENDANCE
-                        // ======================================
+                        // ====================================
+                        // VIEW ATTENDANCE
+                        // ====================================
 
                         _buildActionCard(
                           title: 'View Attendance %',
@@ -444,29 +435,9 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
                           },
                         ),
 
-                        // ======================================
-                        // INTERNAL MARKS
-                        // ======================================
-
-                        _buildActionCard(
-                          title: 'View Internal Marks',
-                          subtitle: 'Mid-Sem Results',
-                          icon: Icons.analytics_outlined,
-                          color: AppTheme.secondaryTeal,
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) =>
-                                    const StudentViewInternalMarksScreen(),
-                              ),
-                            );
-                          },
-                        ),
-
-                        // ======================================
+                        // ====================================
                         // NOTIFICATIONS
-                        // ======================================
+                        // ====================================
 
                         _buildActionCard(
                           title: 'Push Notifications',
@@ -492,6 +463,98 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
                 ),
               ),
             ),
+    );
+  }
+
+  // ============================================================
+  // TAKE ATTENDANCE CARD
+  // ============================================================
+
+  Widget _buildTakeAttendanceCard() {
+    return Card(
+      margin: EdgeInsets.zero,
+      elevation: 3,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(
+          16,
+        ),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(
+          16,
+        ),
+        onTap: () async {
+          await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => const ScanAttendanceScreen(),
+            ),
+          );
+
+          // Refresh student data
+          // after scanner returns.
+          await _loadStudent();
+        },
+        child: Padding(
+          padding: const EdgeInsets.all(
+            16,
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 58,
+                height: 58,
+                decoration: BoxDecoration(
+                  color: Colors.green.withOpacity(
+                    0.12,
+                  ),
+                  borderRadius: BorderRadius.circular(
+                    14,
+                  ),
+                ),
+                child: const Icon(
+                  Icons.qr_code_scanner,
+                  color: Colors.green,
+                  size: 32,
+                ),
+              ),
+              const SizedBox(
+                width: 14,
+              ),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Take Attendance',
+                      style: TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.bold,
+                        color: AppTheme.textPrimary,
+                      ),
+                    ),
+                    SizedBox(
+                      height: 4,
+                    ),
+                    Text(
+                      'Scan Faculty / HOD QR',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: AppTheme.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(
+                Icons.arrow_forward_ios,
+                size: 18,
+                color: Colors.grey,
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -526,10 +589,14 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
     return Card(
       color: AppTheme.primaryBlue,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(
+          16,
+        ),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(
+          20,
+        ),
         child: Row(
           children: [
             const CircleAvatar(
@@ -610,7 +677,9 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
         return Card(
           color: Colors.green.shade50,
           child: Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(
+              16,
+            ),
             child: Column(
               children: [
                 const Icon(
@@ -665,7 +734,9 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
         return Card(
           color: Colors.blue.shade50,
           child: Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(
+              16,
+            ),
             child: Column(
               children: [
                 const Icon(
@@ -701,14 +772,16 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
   }
 
   // ============================================================
-  // ATTENDANCE FIRESTORE STREAM
+  // ATTENDANCE STREAM
   // ============================================================
 
   Stream<QuerySnapshot<Map<String, dynamic>>> _attendanceStream() {
     final String uid = _auth.currentUser?.uid ?? '';
 
     return _firestore
-        .collection('attendance')
+        .collection(
+          'attendance_records',
+        )
         .where(
           'studentUid',
           isEqualTo: uid,
@@ -717,14 +790,16 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
   }
 
   // ============================================================
-  // MARKS FIRESTORE STREAM
+  // MARKS STREAM
   // ============================================================
 
   Stream<QuerySnapshot<Map<String, dynamic>>> _marksStream() {
     final String uid = _auth.currentUser?.uid ?? '';
 
     return _firestore
-        .collection('internal_marks')
+        .collection(
+          'internal_marks',
+        )
         .where(
           'studentUid',
           isEqualTo: uid,
@@ -743,20 +818,31 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
       return 0;
     }
 
-    double totalClasses = 0;
-    double attendedClasses = 0;
+    int totalClasses = 0;
+
+    int attendedClasses = 0;
 
     for (final doc in docs) {
       final data = doc.data();
 
-      final dynamic total = data['total'] ?? data['totalClasses'];
+      final String status = data['status']?.toString().toLowerCase() ?? '';
 
-      final dynamic attended = data['attended'] ?? data['attendedClasses'];
+      if (status == 'present') {
+        attendedClasses++;
+        totalClasses++;
+      } else if (status == 'absent') {
+        totalClasses++;
+      } else {
+        // Support old format
+        final dynamic total = data['total'] ?? data['totalClasses'];
 
-      if (total is num && attended is num) {
-        totalClasses += total.toDouble();
+        final dynamic attended = data['attended'] ?? data['attendedClasses'];
 
-        attendedClasses += attended.toDouble();
+        if (total is num && attended is num) {
+          totalClasses += total.toInt();
+
+          attendedClasses += attended.toInt();
+        }
       }
     }
 
@@ -779,6 +865,7 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
     }
 
     double totalObtained = 0;
+
     double totalMax = 0;
 
     for (final doc in docs) {
@@ -800,8 +887,6 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
       return 0;
     }
 
-    // Convert overall percentage
-    // to a value out of 20.
     return (totalObtained / totalMax) * 20;
   }
 
@@ -817,17 +902,26 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
     required VoidCallback onTap,
   }) {
     return Card(
+      margin: EdgeInsets.zero,
+      elevation: 2,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(
+          16,
+        ),
         child: Padding(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.all(
+            10,
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
             children: [
               Container(
-                padding: const EdgeInsets.all(8),
+                padding: const EdgeInsets.all(
+                  7,
+                ),
                 decoration: BoxDecoration(
                   color: color.withOpacity(
                     0.12,
@@ -839,11 +933,11 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
                 child: Icon(
                   icon,
                   color: color,
-                  size: 24,
+                  size: 22,
                 ),
               ),
               const SizedBox(
-                height: 10,
+                height: 7,
               ),
               Text(
                 title,
@@ -851,20 +945,22 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
                   fontWeight: FontWeight.bold,
-                  fontSize: 13,
+                  fontSize: 12,
                   color: AppTheme.textPrimary,
+                  height: 1.15,
                 ),
               ),
               const SizedBox(
-                height: 2,
+                height: 3,
               ),
               Text(
                 subtitle,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
-                  fontSize: 11,
+                  fontSize: 10,
                   color: AppTheme.textSecondary,
+                  height: 1.15,
                 ),
               ),
             ],
