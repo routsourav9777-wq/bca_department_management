@@ -38,26 +38,23 @@ class _LoginScreenState extends State<LoginScreen> {
 
     setState(() => _isLoading = true);
 
+    final email = _emailController.text.trim().toLowerCase();
+
     try {
-      // Firebase Authentication
-      UserCredential userCredential = await _auth.signInWithEmailAndPassword(
-        email: _emailController.text.trim(),
-        password: _passwordController.text.trim(),
+      // ================= FIREBASE AUTHENTICATION =================
+
+      await _auth.signInWithEmailAndPassword(
+        email: email,
+        password: _passwordController.text,
       );
 
-      // Check HOD collection
+      // ================= 1. CHECK HOD =================
+
       final hodQuery = await _firestore
           .collection('hod')
-          .where('email', isEqualTo: _emailController.text.trim())
+          .where('email', isEqualTo: email)
           .limit(1)
           .get();
-
-      debugPrint("Entered Email = ${_emailController.text.trim()}");
-      debugPrint("Docs Found = ${hodQuery.docs.length}");
-
-      if (hodQuery.docs.isNotEmpty) {
-        debugPrint(hodQuery.docs.first.data().toString());
-      }
 
       if (hodQuery.docs.isNotEmpty) {
         final data = hodQuery.docs.first.data();
@@ -75,13 +72,101 @@ class _LoginScreenState extends State<LoginScreen> {
         }
       }
 
+      // ================= 2. CHECK STUDENT =================
+
+      final studentQuery = await _firestore
+          .collection('students')
+          .where('email', isEqualTo: email)
+          .limit(1)
+          .get();
+
+      if (studentQuery.docs.isNotEmpty) {
+        final studentData = studentQuery.docs.first.data();
+
+        final status = studentData['status'];
+
+        // Student Approved
+        if (status == 'approved') {
+          if (!mounted) return;
+
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (_) => const StudentDashboardScreen(),
+            ),
+          );
+          return;
+        }
+
+        // Student Pending
+        if (status == 'pending') {
+          await _auth.signOut();
+
+          if (!mounted) return;
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                "Your registration is still pending.\nPlease wait for HOD approval.",
+              ),
+              backgroundColor: Colors.orange,
+            ),
+          );
+          return;
+        }
+
+        // Student Rejected
+        if (status == 'rejected') {
+          await _auth.signOut();
+
+          if (!mounted) return;
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                "Your registration has been rejected by the HOD.",
+              ),
+              backgroundColor: Colors.red,
+            ),
+          );
+          return;
+        }
+      }
+
+      // ================= 3. CHECK FACULTY =================
+
+      final facultyQuery = await _firestore
+          .collection('faculty')
+          .where('email', isEqualTo: email)
+          .limit(1)
+          .get();
+
+      if (facultyQuery.docs.isNotEmpty) {
+        final facultyData = facultyQuery.docs.first.data();
+
+        if (facultyData['status'] == 'active' &&
+            facultyData['role'] == 'faculty') {
+          if (!mounted) return;
+
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (_) => const FacultyDashboardScreen(),
+            ),
+          );
+          return;
+        }
+      }
+
+      // ================= ACCESS DENIED =================
+
       await _auth.signOut();
 
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text("Access Denied"),
+          content: Text("Account not authorized for this portal."),
           backgroundColor: Colors.red,
         ),
       );
@@ -89,9 +174,13 @@ class _LoginScreenState extends State<LoginScreen> {
       String message = "Login Failed";
 
       if (e.code == 'user-not-found') {
-        message = "User not found";
+        message = "No account found with this email.";
       } else if (e.code == 'wrong-password' || e.code == 'invalid-credential') {
-        message = "Invalid email or password";
+        message = "Invalid email or password.";
+      } else if (e.code == 'user-disabled') {
+        message = "This account has been disabled.";
+      } else if (e.code == 'invalid-email') {
+        message = "Invalid email address.";
       }
 
       if (!mounted) return;
@@ -99,6 +188,15 @@ class _LoginScreenState extends State<LoginScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(message),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Something went wrong: $e"),
           backgroundColor: Colors.red,
         ),
       );
