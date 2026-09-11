@@ -11,16 +11,20 @@ class MarkAttendanceScreen extends StatefulWidget {
   const MarkAttendanceScreen({super.key});
 
   @override
-  State<MarkAttendanceScreen> createState() => _MarkAttendanceScreenState();
+  State<MarkAttendanceScreen> createState() =>
+      _MarkAttendanceScreenState();
 }
 
-class _MarkAttendanceScreenState extends State<MarkAttendanceScreen> {
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+class _MarkAttendanceScreenState
+    extends State<MarkAttendanceScreen> {
+  final FirebaseFirestore _firestore =
+      FirebaseFirestore.instance;
 
-  final FirebaseAuth _auth = FirebaseAuth.instance;
+  final FirebaseAuth _auth =
+      FirebaseAuth.instance;
 
   // ============================================================
-  // SEMESTER
+  // SEMESTERS
   // ============================================================
 
   final List<String> _semesters = const [
@@ -39,10 +43,11 @@ class _MarkAttendanceScreenState extends State<MarkAttendanceScreen> {
   Map<String, dynamic>? _selectedSubject;
 
   bool _loadingSubjects = false;
+
   bool _generatingQR = false;
 
   // ============================================================
-  // ACTIVE QR SESSION
+  // QR SESSION
   // ============================================================
 
   String? _sessionId;
@@ -54,6 +59,10 @@ class _MarkAttendanceScreenState extends State<MarkAttendanceScreen> {
   Timer? _qrTimer;
 
   int _qrSecond = 0;
+
+  // ============================================================
+  // PRESENT COUNT
+  // ============================================================
 
   int _presentCount = 0;
 
@@ -85,11 +94,11 @@ class _MarkAttendanceScreenState extends State<MarkAttendanceScreen> {
   }
 
   // ============================================================
-  // CURRENT DATE
+  // TODAY
   // ============================================================
 
   DateTime get _today {
-    final now = DateTime.now();
+    final DateTime now = DateTime.now();
 
     return DateTime(
       now.year,
@@ -103,11 +112,13 @@ class _MarkAttendanceScreenState extends State<MarkAttendanceScreen> {
   // ============================================================
 
   String get _formattedDate {
-    final date = _today;
+    final DateTime date = _today;
 
-    final String day = date.day.toString().padLeft(2, '0');
+    final String day =
+        date.day.toString().padLeft(2, '0');
 
-    final String month = date.month.toString().padLeft(2, '0');
+    final String month =
+        date.month.toString().padLeft(2, '0');
 
     return '$day/$month/${date.year}';
   }
@@ -122,41 +133,35 @@ class _MarkAttendanceScreenState extends State<MarkAttendanceScreen> {
 
   // ============================================================
   // LOAD SUBJECTS
-  //
-  // HOD-added subjects:
-  //
-  // subjects
-  //   name
-  //   code
-  //   semester
-  //   department
-  //   status
-  //
   // ============================================================
 
   Future<void> _loadSubjects() async {
-    setState(() {
-      _loadingSubjects = true;
-      _selectedSubjectId = null;
-      _selectedSubject = null;
-    });
+    if (mounted) {
+      setState(() {
+        _loadingSubjects = true;
+        _selectedSubjectId = null;
+        _selectedSubject = null;
+      });
+    }
 
     try {
-      final QuerySnapshot<Map<String, dynamic>> snapshot = await _firestore
-          .collection('subjects')
-          .where(
-            'department',
-            isEqualTo: 'BCA',
-          )
-          .where(
-            'semester',
-            isEqualTo: _selectedSemester,
-          )
-          .get();
-
-      final docs = snapshot.docs;
+      final QuerySnapshot<Map<String, dynamic>>
+          snapshot =
+          await _firestore
+              .collection('subjects')
+              .where(
+                'department',
+                isEqualTo: 'BCA',
+              )
+              .where(
+                'semester',
+                isEqualTo: _selectedSemester,
+              )
+              .get();
 
       if (!mounted) return;
+
+      final docs = snapshot.docs;
 
       if (docs.isNotEmpty) {
         final first = docs.first;
@@ -173,25 +178,17 @@ class _MarkAttendanceScreenState extends State<MarkAttendanceScreen> {
     } on FirebaseException catch (e) {
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Unable to load subjects: '
-            '${e.message ?? e.code}',
-          ),
-          backgroundColor: Colors.red,
-        ),
+      _showMessage(
+        'Unable to load subjects:\n'
+        '${e.message ?? e.code}',
+        error: true,
       );
     } catch (e) {
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Error loading subjects: $e',
-          ),
-          backgroundColor: Colors.red,
-        ),
+      _showMessage(
+        'Error loading subjects:\n$e',
+        error: true,
       );
     } finally {
       if (mounted) {
@@ -207,25 +204,25 @@ class _MarkAttendanceScreenState extends State<MarkAttendanceScreen> {
   // ============================================================
 
   String _generateSecret() {
-    const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+    const String characters =
+        'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
         'abcdefghijklmnopqrstuvwxyz'
         '0123456789';
 
-    final Random random = Random.secure();
+    final Random random =
+        Random.secure();
 
     return List.generate(
       48,
-      (_) => characters[random.nextInt(characters.length)],
+      (_) => characters[
+          random.nextInt(
+            characters.length,
+          )],
     ).join();
   }
 
   // ============================================================
   // START QR ROTATION
-  //
-  // QR CHANGES EVERY 1 SECOND
-  //
-  // NO AUTOMATIC CLOSE
-  //
   // ============================================================
 
   void _startQrRotation() {
@@ -237,7 +234,7 @@ class _MarkAttendanceScreenState extends State<MarkAttendanceScreen> {
 
     _qrTimer = Timer.periodic(
       const Duration(seconds: 1),
-      (timer) {
+      (Timer timer) {
         if (!mounted) {
           timer.cancel();
           return;
@@ -251,185 +248,226 @@ class _MarkAttendanceScreenState extends State<MarkAttendanceScreen> {
   }
 
   // ============================================================
-  // UPDATE QR DATA
+  // UPDATE QR
   // ============================================================
 
   void _updateQr() {
-    if (_sessionId == null || _sessionSecret == null) {
+    if (_sessionId == null ||
+        _sessionSecret == null ||
+        _selectedSubjectId == null) {
       return;
     }
 
-    final int currentSecond = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final int currentSecond =
+        DateTime.now()
+                .millisecondsSinceEpoch ~/
+            1000;
 
-    final Map<String, dynamic> qrPayload = {
+    final Map<String, dynamic>
+        qrPayload = {
       'type': 'attendance',
 
-      'version': 1,
+      'version': 2,
 
-      'sessionId': _sessionId,
+      'sessionId':
+          _sessionId,
 
-      // Changes every second
-      'timestamp': currentSecond,
+      'timestamp':
+          currentSecond,
 
-      'secret': _sessionSecret,
+      'secret':
+          _sessionSecret,
 
-      'department': 'BCA',
+      'department':
+          'BCA',
 
-      'semester': _selectedSemester,
+      'semester':
+          _selectedSemester,
 
-      'subjectId': _selectedSubjectId,
+      'subjectId':
+          _selectedSubjectId,
 
-      'subjectName': _selectedSubject?['name']?.toString() ?? '',
+      'subjectName':
+          _selectedSubject?['name']
+                  ?.toString() ??
+              '',
 
-      // Current attendance date
-      'attendanceDate': _formattedDate,
+      'attendanceDate':
+          _formattedDate,
+
+      'year':
+          _today.year,
+
+      'month':
+          _today.month,
+
+      'day':
+          _today.day,
     };
 
-    final String encoded = jsonEncode(qrPayload);
+    final String encoded =
+        jsonEncode(qrPayload);
 
     if (!mounted) return;
 
     setState(() {
-      _currentQrData = encoded;
+      _currentQrData =
+          encoded;
     });
   }
 
   // ============================================================
-  // GENERATE ATTENDANCE SESSION
+  // GENERATE ATTENDANCE QR
   // ============================================================
 
-  Future<void> _generateAttendanceQR() async {
-    if (_selectedSubjectId == null || _selectedSubject == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Please select a subject first.',
-          ),
-          backgroundColor: Colors.red,
-        ),
+  Future<void>
+      _generateAttendanceQR() async {
+    if (_selectedSubjectId == null ||
+        _selectedSubject == null) {
+      _showMessage(
+        'Please select a subject first.',
+        error: true,
       );
 
       return;
     }
 
-    final User? user = _auth.currentUser;
+    final User? user =
+        _auth.currentUser;
 
     if (user == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Please login again.',
-          ),
-          backgroundColor: Colors.red,
-        ),
+      _showMessage(
+        'Please login again.',
+        error: true,
       );
 
       return;
     }
 
-    // Close previous session if any
-    await _closeCurrentSession(
-      showMessage: false,
-    );
+    // Close previous session
+    if (_sessionId != null) {
+      await _closeCurrentSession(
+        showMessage: false,
+      );
+    }
+
+    if (!mounted) return;
 
     setState(() {
       _generatingQR = true;
     });
 
     try {
-      final String secret = _generateSecret();
+      final String secret =
+          _generateSecret();
 
-      final DocumentReference<Map<String, dynamic>> sessionRef = _firestore
-          .collection(
-            'attendance_sessions',
-          )
-          .doc();
+      final DocumentReference<
+              Map<String, dynamic>>
+          sessionRef =
+          _firestore
+              .collection(
+                'attendance_sessions',
+              )
+              .doc();
 
       // ========================================================
       // CREATE SESSION
       // ========================================================
 
       await sessionRef.set({
-        'sessionId': sessionRef.id,
+        'sessionId':
+            sessionRef.id,
 
-        'secret': secret,
+        'secret':
+            secret,
 
-        'facultyUid': user.uid,
+        'facultyUid':
+            user.uid,
 
-        'facultyEmail': user.email ?? '',
+        'facultyEmail':
+            user.email ?? '',
 
-        'subjectId': _selectedSubjectId,
+        'subjectId':
+            _selectedSubjectId,
 
-        'subjectName': _selectedSubject?['name']?.toString() ?? '',
+        'subjectName':
+            _selectedSubject?['name']
+                    ?.toString() ??
+                '',
 
-        'subjectCode': _selectedSubject?['code']?.toString() ?? '',
+        'subjectCode':
+            _selectedSubject?['code']
+                    ?.toString() ??
+                '',
 
-        'department': 'BCA',
+        'department':
+            'BCA',
 
-        'semester': _selectedSemester,
+        'semester':
+            _selectedSemester,
 
-        // IMPORTANT:
-        // Current attendance date
-        'attendanceDate': _firebaseToday,
+        'attendanceDate':
+            _firebaseToday,
 
-        'attendanceDateText': _formattedDate,
+        'attendanceDateText':
+            _formattedDate,
 
-        'createdAt': FieldValue.serverTimestamp(),
+        'year':
+            _today.year,
 
-        // No expiry
-        'status': 'active',
+        'month':
+            _today.month,
 
-        'presentCount': 0,
+        'day':
+            _today.day,
+
+        'createdAt':
+            FieldValue.serverTimestamp(),
+
+        'status':
+            'active',
+
+        'presentCount':
+            0,
       });
 
       if (!mounted) return;
 
       setState(() {
-        _sessionId = sessionRef.id;
+        _sessionId =
+            sessionRef.id;
 
-        _sessionSecret = secret;
+        _sessionSecret =
+            secret;
 
         _presentCount = 0;
 
         _currentQrData = '';
       });
 
-      // Start 1-second QR rotation
+      // Start QR rotation
       _startQrRotation();
 
-      // Listen to students
+      // Start realtime attendance count
       _listenToPresentCount();
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Live QR started. QR changes every 1 second.',
-          ),
-          backgroundColor: Colors.green,
-        ),
+      _showMessage(
+        'Live QR started. QR changes every 1 second.',
       );
     } on FirebaseException catch (e) {
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Firebase Error: '
-            '${e.message ?? e.code}',
-          ),
-          backgroundColor: Colors.red,
-        ),
+      _showMessage(
+        'Firebase Error:\n'
+        '${e.message ?? e.code}',
+        error: true,
       );
     } catch (e) {
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Error: $e',
-          ),
-          backgroundColor: Colors.red,
-        ),
+      _showMessage(
+        'Error:\n$e',
+        error: true,
       );
     } finally {
       if (mounted) {
@@ -441,46 +479,263 @@ class _MarkAttendanceScreenState extends State<MarkAttendanceScreen> {
   }
 
   // ============================================================
-  // LIVE PRESENT COUNT
+  // PRESENT COUNT
+  //
+  // IMPORTANT:
+  //
+  // We DO NOT use attendance_records here.
+  //
+  // Actual attendance is:
+  //
+  // attendance
+  //   student_subject_year_month
+  //
+  // days.12 = P
+  //
+  // We check:
+  //
+  // 1. subjectId
+  // 2. month
+  // 3. lastAttendanceDate = today
+  // 4. days.today = P
+  //
   // ============================================================
 
   void _listenToPresentCount() {
     _attendanceSubscription?.cancel();
 
-    if (_sessionId == null) {
+    if (_selectedSubjectId == null) {
+      if (mounted) {
+        setState(() {
+          _presentCount = 0;
+        });
+      }
+
       return;
     }
 
-    _attendanceSubscription = _firestore
-        .collection(
-          'attendance_records',
-        )
-        .where(
-          'sessionId',
-          isEqualTo: _sessionId,
-        )
-        .snapshots()
-        .listen(
-      (snapshot) {
+    final String subjectId =
+        _selectedSubjectId!;
+
+    _attendanceSubscription =
+        _firestore
+            .collection('attendance')
+            .where(
+              'subjectId',
+              isEqualTo: subjectId,
+            )
+            .snapshots()
+            .listen(
+      (
+        QuerySnapshot<
+                Map<String, dynamic>>
+            snapshot,
+      ) {
+        final DateTime today =
+            _today;
+
+        final String todayDay =
+            today.day.toString();
+
+        int count = 0;
+
+        // ======================================================
+        // CHECK EVERY ATTENDANCE DOCUMENT
+        // ======================================================
+
+        for (final doc
+            in snapshot.docs) {
+          final Map<String, dynamic>
+              data =
+              doc.data();
+
+          // ----------------------------------------------------
+          // MONTH CHECK
+          // ----------------------------------------------------
+
+          final dynamic monthValue =
+              data['month'];
+
+          int? month;
+
+          if (monthValue is int) {
+            month = monthValue;
+          } else {
+            month = int.tryParse(
+              monthValue?.toString() ??
+                  '',
+            );
+          }
+
+          if (month != today.month) {
+            continue;
+          }
+
+          // ----------------------------------------------------
+          // LAST ATTENDANCE DATE
+          // ----------------------------------------------------
+
+          final dynamic
+              lastAttendanceDate =
+              data[
+                  'lastAttendanceDate'];
+
+          if (lastAttendanceDate
+              is! Timestamp) {
+            continue;
+          }
+
+          final DateTime
+              attendanceDate =
+              lastAttendanceDate
+                  .toDate();
+
+          // ----------------------------------------------------
+          // MUST BE TODAY
+          // ----------------------------------------------------
+
+          final bool isToday =
+              attendanceDate.year ==
+                      today.year &&
+                  attendanceDate.month ==
+                      today.month &&
+                  attendanceDate.day ==
+                      today.day;
+
+          if (!isToday) {
+            continue;
+          }
+
+          // ----------------------------------------------------
+          // DAYS
+          // ----------------------------------------------------
+
+          final dynamic days =
+              data['days'];
+
+          if (days is! Map) {
+            continue;
+          }
+
+          // ----------------------------------------------------
+          // TODAY P?
+          // ----------------------------------------------------
+
+          final dynamic status =
+              days[todayDay];
+
+          if (status
+                  ?.toString()
+                  .trim()
+                  .toUpperCase() ==
+              'P') {
+            count++;
+          }
+        }
+
+        // ======================================================
+        // DEBUG
+        // ======================================================
+
+        debugPrint(
+          '--------------------------------',
+        );
+
+        debugPrint(
+          'Attendance subject: $subjectId',
+        );
+
+        debugPrint(
+          'Attendance date: $_formattedDate',
+        );
+
+        debugPrint(
+          'Attendance documents: '
+          '${snapshot.docs.length}',
+        );
+
+        debugPrint(
+          'Present count: $count',
+        );
+
+        debugPrint(
+          '--------------------------------',
+        );
+
+        // ======================================================
+        // UPDATE SCREEN
+        // ======================================================
+
         if (!mounted) return;
 
         setState(() {
-          _presentCount = snapshot.docs.length;
+          _presentCount =
+              count;
         });
+
+        // ======================================================
+        // UPDATE SESSION COUNT
+        // ======================================================
+
+        _updateFirebaseSessionCount(
+          count,
+        );
+      },
+      onError: (Object error) {
+        debugPrint(
+          'Attendance count error: $error',
+        );
       },
     );
   }
 
   // ============================================================
-  // CLOSE SESSION MANUALLY
+  // UPDATE FIREBASE SESSION COUNT
   // ============================================================
 
-  Future<void> _closeCurrentSession({
+  Future<void>
+      _updateFirebaseSessionCount(
+    int count,
+  ) async {
+    final String? sessionId =
+        _sessionId;
+
+    if (sessionId == null) {
+      return;
+    }
+
+    try {
+      await _firestore
+          .collection(
+            'attendance_sessions',
+          )
+          .doc(sessionId)
+          .update({
+        'presentCount':
+            count,
+
+        'updatedAt':
+            FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      debugPrint(
+        'Session count update error: $e',
+      );
+    }
+  }
+
+  // ============================================================
+  // CLOSE SESSION
+  // ============================================================
+
+  Future<void>
+      _closeCurrentSession({
     bool showMessage = true,
   }) async {
     _qrTimer?.cancel();
 
-    _attendanceSubscription?.cancel();
+    _attendanceSubscription
+        ?.cancel();
 
     if (_sessionId != null) {
       try {
@@ -490,13 +745,18 @@ class _MarkAttendanceScreenState extends State<MarkAttendanceScreen> {
             )
             .doc(_sessionId)
             .update({
-          'status': 'closed',
-          'closedAt': FieldValue.serverTimestamp(),
-          'presentCount': _presentCount,
+          'status':
+              'closed',
+
+          'closedAt':
+              FieldValue.serverTimestamp(),
+
+          'presentCount':
+              _presentCount,
         });
       } catch (e) {
         debugPrint(
-          'Close attendance session error: $e',
+          'Close session error: $e',
         );
       }
     }
@@ -516,13 +776,9 @@ class _MarkAttendanceScreenState extends State<MarkAttendanceScreen> {
     });
 
     if (showMessage) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Attendance session closed.',
-          ),
-          backgroundColor: Colors.orange,
-        ),
+      _showMessage(
+        'Attendance session closed.',
+        color: Colors.orange,
       );
     }
   }
@@ -534,7 +790,9 @@ class _MarkAttendanceScreenState extends State<MarkAttendanceScreen> {
   Future<void> _changeSemester(
     String? value,
   ) async {
-    if (value == null) return;
+    if (value == null) {
+      return;
+    }
 
     if (_sessionId != null) {
       await _closeCurrentSession(
@@ -542,23 +800,41 @@ class _MarkAttendanceScreenState extends State<MarkAttendanceScreen> {
       );
     }
 
+    if (!mounted) return;
+
     setState(() {
-      _selectedSemester = value;
+      _selectedSemester =
+          value;
+
+      _selectedSubjectId =
+          null;
+
+      _selectedSubject =
+          null;
+
+      _presentCount = 0;
     });
 
     await _loadSubjects();
   }
 
   // ============================================================
-  // SUBJECT DISPLAY
+  // SUBJECT DISPLAY NAME
   // ============================================================
 
   String _subjectDisplayName(
-    Map<String, dynamic> subject,
+    Map<String, dynamic>
+        subject,
   ) {
-    final String code = subject['code']?.toString() ?? '';
+    final String code =
+        subject['code']
+                ?.toString() ??
+            '';
 
-    final String name = subject['name']?.toString() ?? 'Unnamed Subject';
+    final String name =
+        subject['name']
+                ?.toString() ??
+            'Unnamed Subject';
 
     if (code.isEmpty) {
       return name;
@@ -568,181 +844,20 @@ class _MarkAttendanceScreenState extends State<MarkAttendanceScreen> {
   }
 
   // ============================================================
-  // BUILD
-  // ============================================================
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text(
-          'QR Attendance',
-        ),
-      ),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // ==================================================
-              // INFO
-              // ==================================================
-
-              Card(
-                color: Colors.blue.shade50,
-                child: Padding(
-                  padding: const EdgeInsets.all(
-                    16,
-                  ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Icon(
-                        Icons.qr_code_scanner,
-                        color: Colors.blue.shade700,
-                        size: 34,
-                      ),
-                      const SizedBox(
-                        width: 12,
-                      ),
-                      const Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Live QR Attendance',
-                              style: TextStyle(
-                                fontSize: 17,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            SizedBox(
-                              height: 5,
-                            ),
-                            Text(
-                              'QR changes every 1 second. Faculty/HOD must manually close the attendance session.',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey,
-                                height: 1.4,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-
-              const SizedBox(
-                height: 16,
-              ),
-
-              // ==================================================
-              // SEMESTER DROPDOWN
-              // ==================================================
-
-              DropdownButtonFormField<String>(
-                initialValue: _selectedSemester,
-                isExpanded: true,
-                decoration: InputDecoration(
-                  labelText: 'Semester',
-                  prefixIcon: const Icon(
-                    Icons.school_outlined,
-                  ),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(
-                      12,
-                    ),
-                  ),
-                ),
-                items: _semesters
-                    .map(
-                      (semester) => DropdownMenuItem<String>(
-                        value: semester,
-                        child: Text(
-                          semester,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    )
-                    .toList(),
-                onChanged: _changeSemester,
-              ),
-
-              const SizedBox(
-                height: 16,
-              ),
-
-              // ==================================================
-              // SUBJECT DROPDOWN
-              // ==================================================
-
-              _buildSubjectDropdown(),
-
-              const SizedBox(
-                height: 20,
-              ),
-
-              // ==================================================
-              // GENERATE BUTTON
-              // ==================================================
-
-              SizedBox(
-                height: 52,
-                child: ElevatedButton.icon(
-                  onPressed: _generatingQR ? null : _generateAttendanceQR,
-                  icon: _generatingQR
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            color: Colors.white,
-                            strokeWidth: 2,
-                          ),
-                        )
-                      : const Icon(
-                          Icons.qr_code_2,
-                        ),
-                  label: Text(
-                    _generatingQR ? 'Generating...' : 'Generate Live QR',
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ),
-
-              const SizedBox(
-                height: 20,
-              ),
-
-              // ==================================================
-              // QR CARD
-              // ==================================================
-
-              if (_sessionId != null) _buildLiveQrCard(),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  // ============================================================
   // SUBJECT DROPDOWN
   // ============================================================
 
   Widget _buildSubjectDropdown() {
     if (_loadingSubjects) {
       return const Center(
-        child: CircularProgressIndicator(),
+        child:
+            CircularProgressIndicator(),
       );
     }
 
-    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+    return StreamBuilder<
+        QuerySnapshot<
+            Map<String, dynamic>>>(
       stream: _firestore
           .collection('subjects')
           .where(
@@ -751,23 +866,38 @@ class _MarkAttendanceScreenState extends State<MarkAttendanceScreen> {
           )
           .where(
             'semester',
-            isEqualTo: _selectedSemester,
+            isEqualTo:
+                _selectedSemester,
           )
           .snapshots(),
-      builder: (context, snapshot) {
+
+      builder: (
+        BuildContext context,
+        AsyncSnapshot<
+                QuerySnapshot<
+                    Map<String, dynamic>>>
+            snapshot,
+      ) {
         if (snapshot.hasError) {
           return Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: Colors.red.shade50,
-              borderRadius: BorderRadius.circular(
+            padding:
+                const EdgeInsets.all(
+              14,
+            ),
+            decoration:
+                BoxDecoration(
+              color:
+                  Colors.red.shade50,
+              borderRadius:
+                  BorderRadius.circular(
                 12,
               ),
             ),
             child: Text(
               'Unable to load subjects.\n'
               '${snapshot.error}',
-              style: const TextStyle(
+              style:
+                  const TextStyle(
                 color: Colors.red,
                 fontSize: 12,
               ),
@@ -775,14 +905,25 @@ class _MarkAttendanceScreenState extends State<MarkAttendanceScreen> {
           );
         }
 
-        final docs = snapshot.data?.docs ?? [];
+        final List<
+                QueryDocumentSnapshot<
+                    Map<String, dynamic>>>
+            docs =
+            snapshot.data?.docs ??
+                [];
 
         if (docs.isEmpty) {
           return Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.orange.shade50,
-              borderRadius: BorderRadius.circular(
+            padding:
+                const EdgeInsets.all(
+              16,
+            ),
+            decoration:
+                BoxDecoration(
+              color:
+                  Colors.orange.shade50,
+              borderRadius:
+                  BorderRadius.circular(
                 12,
               ),
             ),
@@ -790,7 +931,8 @@ class _MarkAttendanceScreenState extends State<MarkAttendanceScreen> {
               children: [
                 Icon(
                   Icons.info_outline,
-                  color: Colors.orange,
+                  color:
+                      Colors.orange,
                 ),
                 SizedBox(
                   width: 10,
@@ -798,8 +940,10 @@ class _MarkAttendanceScreenState extends State<MarkAttendanceScreen> {
                 Expanded(
                   child: Text(
                     'No subjects added by HOD for this semester.',
-                    style: TextStyle(
-                      color: Colors.orange,
+                    style:
+                        TextStyle(
+                      color:
+                          Colors.orange,
                       fontSize: 13,
                     ),
                   ),
@@ -809,19 +953,26 @@ class _MarkAttendanceScreenState extends State<MarkAttendanceScreen> {
           );
         }
 
-        final bool selectedExists = docs.any(
-          (doc) => doc.id == _selectedSubjectId,
+        final bool
+            selectedExists =
+            docs.any(
+          (doc) =>
+              doc.id ==
+              _selectedSubjectId,
         );
 
         if (!selectedExists) {
-          WidgetsBinding.instance.addPostFrameCallback(
+          WidgetsBinding.instance
+              .addPostFrameCallback(
             (_) {
               if (!mounted) return;
 
-              final first = docs.first;
+              final first =
+                  docs.first;
 
               setState(() {
-                _selectedSubjectId = first.id;
+                _selectedSubjectId =
+                    first.id;
 
                 _selectedSubject = {
                   ...first.data(),
@@ -832,53 +983,96 @@ class _MarkAttendanceScreenState extends State<MarkAttendanceScreen> {
           );
         }
 
-        return DropdownButtonFormField<String>(
-          initialValue: selectedExists ? _selectedSubjectId : docs.first.id,
+        return DropdownButtonFormField<
+            String>(
+          initialValue:
+              selectedExists
+                  ? _selectedSubjectId
+                  : docs.first.id,
+
           isExpanded: true,
-          decoration: InputDecoration(
-            labelText: 'Subject',
-            prefixIcon: const Icon(
-              Icons.menu_book_outlined,
+
+          decoration:
+              InputDecoration(
+            labelText:
+                'Subject',
+
+            prefixIcon:
+                const Icon(
+              Icons
+                  .menu_book_outlined,
             ),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(
+
+            border:
+                OutlineInputBorder(
+              borderRadius:
+                  BorderRadius.circular(
                 12,
               ),
             ),
           ),
-          items: docs.map(
-            (doc) {
-              final data = doc.data();
 
-              return DropdownMenuItem<String>(
-                value: doc.id,
-                child: Text(
+          items: docs.map(
+            (
+              QueryDocumentSnapshot<
+                      Map<String,
+                          dynamic>>
+                  doc,
+            ) {
+              final Map<String,
+                      dynamic>
+                  data =
+                  doc.data();
+
+              return DropdownMenuItem<
+                  String>(
+                value:
+                    doc.id,
+
+                child:
+                    Text(
                   _subjectDisplayName(
                     data,
                   ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                  maxLines:
+                      1,
+                  overflow:
+                      TextOverflow
+                          .ellipsis,
                 ),
               );
             },
           ).toList(),
-          onChanged: (value) {
+
+          onChanged:
+              (String? value) {
             if (value == null) {
               return;
             }
 
-            final doc = docs.firstWhere(
-              (d) => d.id == value,
+            final doc =
+                docs.firstWhere(
+              (d) =>
+                  d.id == value,
             );
 
             setState(() {
-              _selectedSubjectId = value;
+              _selectedSubjectId =
+                  value;
 
               _selectedSubject = {
                 ...doc.data(),
                 'id': doc.id,
               };
+
+              _presentCount = 0;
             });
+
+            // If QR is already active,
+            // listen for the selected subject.
+            if (_sessionId != null) {
+              _listenToPresentCount();
+            }
           },
         );
       },
@@ -890,21 +1084,30 @@ class _MarkAttendanceScreenState extends State<MarkAttendanceScreen> {
   // ============================================================
 
   Widget _buildLiveQrCard() {
-    final String subjectName = _selectedSubject == null
-        ? ''
-        : _subjectDisplayName(
-            _selectedSubject!,
-          );
+    final String subjectName =
+        _selectedSubject == null
+            ? ''
+            : _subjectDisplayName(
+                _selectedSubject!,
+              );
 
     return Card(
       elevation: 5,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(
+
+      shape:
+          RoundedRectangleBorder(
+        borderRadius:
+            BorderRadius.circular(
           20,
         ),
       ),
+
       child: Padding(
-        padding: const EdgeInsets.all(20),
+        padding:
+            const EdgeInsets.all(
+          20,
+        ),
+
         child: Column(
           children: [
             // ==================================================
@@ -912,25 +1115,39 @@ class _MarkAttendanceScreenState extends State<MarkAttendanceScreen> {
             // ==================================================
 
             Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisAlignment:
+                  MainAxisAlignment
+                      .center,
+
               children: [
                 Container(
                   width: 10,
                   height: 10,
-                  decoration: const BoxDecoration(
-                    color: Colors.green,
-                    shape: BoxShape.circle,
+
+                  decoration:
+                      const BoxDecoration(
+                    color:
+                        Colors.green,
+                    shape:
+                        BoxShape.circle,
                   ),
                 ),
+
                 const SizedBox(
                   width: 8,
                 ),
+
                 const Text(
                   'LIVE QR ACTIVE',
-                  style: TextStyle(
-                    color: Colors.green,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 15,
+
+                  style:
+                      TextStyle(
+                    color:
+                        Colors.green,
+                    fontWeight:
+                        FontWeight.bold,
+                    fontSize:
+                        15,
                   ),
                 ),
               ],
@@ -946,12 +1163,20 @@ class _MarkAttendanceScreenState extends State<MarkAttendanceScreen> {
 
             Text(
               subjectName,
-              textAlign: TextAlign.center,
+
+              textAlign:
+                  TextAlign.center,
+
               maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
+
+              overflow:
+                  TextOverflow.ellipsis,
+
+              style:
+                  const TextStyle(
                 fontSize: 15,
-                fontWeight: FontWeight.bold,
+                fontWeight:
+                    FontWeight.bold,
               ),
             ),
 
@@ -961,9 +1186,13 @@ class _MarkAttendanceScreenState extends State<MarkAttendanceScreen> {
 
             Text(
               _selectedSemester,
-              style: const TextStyle(
-                color: Colors.grey,
-                fontSize: 12,
+
+              style:
+                  const TextStyle(
+                color:
+                    Colors.grey,
+                fontSize:
+                    12,
               ),
             ),
 
@@ -972,32 +1201,56 @@ class _MarkAttendanceScreenState extends State<MarkAttendanceScreen> {
             ),
 
             // ==================================================
-            // QR CODE
+            // QR
             // ==================================================
 
             Container(
-              padding: const EdgeInsets.all(
+              padding:
+                  const EdgeInsets.all(
                 14,
               ),
-              color: Colors.white,
-              child: _currentQrData.isEmpty
-                  ? const SizedBox(
-                      width: 260,
-                      height: 260,
-                      child: Center(
-                        child: CircularProgressIndicator(),
-                      ),
-                    )
-                  : QrImageView(
-                      key: ValueKey(
-                        _currentQrData,
-                      ),
-                      data: _currentQrData,
-                      version: QrVersions.auto,
-                      size: 260,
-                      backgroundColor: Colors.white,
-                      errorCorrectionLevel: QrErrorCorrectLevel.H,
-                    ),
+
+              color:
+                  Colors.white,
+
+              child:
+                  _currentQrData
+                          .isEmpty
+                      ? const SizedBox(
+                          width:
+                              260,
+                          height:
+                              260,
+                          child:
+                              Center(
+                            child:
+                                CircularProgressIndicator(),
+                          ),
+                        )
+                      : QrImageView(
+                          key:
+                              ValueKey(
+                            _currentQrData,
+                          ),
+
+                          data:
+                              _currentQrData,
+
+                          version:
+                              QrVersions
+                                  .auto,
+
+                          size:
+                              260,
+
+                          backgroundColor:
+                              Colors
+                                  .white,
+
+                          errorCorrectionLevel:
+                              QrErrorCorrectLevel
+                                  .H,
+                        ),
             ),
 
             const SizedBox(
@@ -1005,41 +1258,65 @@ class _MarkAttendanceScreenState extends State<MarkAttendanceScreen> {
             ),
 
             // ==================================================
-            // DATE BELOW QR
+            // DATE
             // ==================================================
 
             Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(
+              width:
+                  double.infinity,
+
+              padding:
+                  const EdgeInsets
+                      .symmetric(
                 horizontal: 16,
                 vertical: 12,
               ),
-              decoration: BoxDecoration(
-                color: Colors.blue.shade50,
-                borderRadius: BorderRadius.circular(
+
+              decoration:
+                  BoxDecoration(
+                color:
+                    Colors.blue.shade50,
+
+                borderRadius:
+                    BorderRadius.circular(
                   12,
                 ),
               ),
-              child: Column(
+
+              child:
+                  Column(
                 children: [
                   const Text(
                     'ATTENDANCE DATE',
-                    style: TextStyle(
-                      color: Colors.blue,
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1.0,
+
+                    style:
+                        TextStyle(
+                      color:
+                          Colors.blue,
+                      fontSize:
+                          10,
+                      fontWeight:
+                          FontWeight.bold,
+                      letterSpacing:
+                          1.0,
                     ),
                   ),
+
                   const SizedBox(
                     height: 4,
                   ),
+
                   Text(
                     _formattedDate,
-                    style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.blue,
+
+                    style:
+                        const TextStyle(
+                      fontSize:
+                          20,
+                      fontWeight:
+                          FontWeight.bold,
+                      color:
+                          Colors.blue,
                     ),
                   ),
                 ],
@@ -1050,17 +1327,20 @@ class _MarkAttendanceScreenState extends State<MarkAttendanceScreen> {
               height: 12,
             ),
 
-            // ==================================================
-            // LIVE CHANGE TEXT
-            // ==================================================
-
             const Text(
               'QR changes automatically every 1 second',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: Colors.blue,
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
+
+              textAlign:
+                  TextAlign.center,
+
+              style:
+                  TextStyle(
+                color:
+                    Colors.blue,
+                fontSize:
+                    12,
+                fontWeight:
+                    FontWeight.bold,
               ),
             ),
 
@@ -1073,39 +1353,63 @@ class _MarkAttendanceScreenState extends State<MarkAttendanceScreen> {
             // ==================================================
 
             Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(
+              width:
+                  double.infinity,
+
+              padding:
+                  const EdgeInsets.all(
                 14,
               ),
-              decoration: BoxDecoration(
-                color: Colors.green.shade50,
-                borderRadius: BorderRadius.circular(
+
+              decoration:
+                  BoxDecoration(
+                color:
+                    Colors.green.shade50,
+
+                borderRadius:
+                    BorderRadius.circular(
                   12,
                 ),
               ),
-              child: Row(
+
+              child:
+                  Row(
                 children: [
                   const Icon(
                     Icons.how_to_reg,
-                    color: Colors.green,
+
+                    color:
+                        Colors.green,
                   ),
+
                   const SizedBox(
                     width: 10,
                   ),
+
                   const Expanded(
-                    child: Text(
+                    child:
+                        Text(
                       'Students Present',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
+
+                      style:
+                          TextStyle(
+                        fontWeight:
+                            FontWeight.bold,
                       ),
                     ),
                   ),
+
                   Text(
                     '$_presentCount',
-                    style: const TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.green,
+
+                    style:
+                        const TextStyle(
+                      fontSize:
+                          22,
+                      fontWeight:
+                          FontWeight.bold,
+                      color:
+                          Colors.green,
                     ),
                   ),
                 ],
@@ -1117,28 +1421,51 @@ class _MarkAttendanceScreenState extends State<MarkAttendanceScreen> {
             ),
 
             // ==================================================
-            // MANUAL CLOSE ONLY
+            // MANUAL CLOSE
             // ==================================================
 
             SizedBox(
-              width: double.infinity,
-              height: 50,
-              child: OutlinedButton.icon(
-                onPressed: _closeCurrentSession,
-                icon: const Icon(
-                  Icons.stop_circle_outlined,
-                  color: Colors.red,
+              width:
+                  double.infinity,
+
+              height:
+                  50,
+
+              child:
+                  OutlinedButton.icon(
+                onPressed:
+                    _closeCurrentSession,
+
+                icon:
+                    const Icon(
+                  Icons
+                      .stop_circle_outlined,
+
+                  color:
+                      Colors.red,
                 ),
-                label: const Text(
+
+                label:
+                    const Text(
                   'Close Attendance Session',
                 ),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.red,
-                  side: const BorderSide(
-                    color: Colors.red,
+
+                style:
+                    OutlinedButton
+                        .styleFrom(
+                  foregroundColor:
+                      Colors.red,
+
+                  side:
+                      const BorderSide(
+                    color:
+                        Colors.red,
                   ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(
+
+                  shape:
+                      RoundedRectangleBorder(
+                    borderRadius:
+                        BorderRadius.circular(
                       12,
                     ),
                   ),
@@ -1152,13 +1479,316 @@ class _MarkAttendanceScreenState extends State<MarkAttendanceScreen> {
 
             const Text(
               'The session will remain active until you manually close it.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: Colors.grey,
-                fontSize: 11,
+
+              textAlign:
+                  TextAlign.center,
+
+              style:
+                  TextStyle(
+                color:
+                    Colors.grey,
+                fontSize:
+                    11,
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  // ============================================================
+  // MESSAGE
+  // ============================================================
+
+  void _showMessage(
+    String message, {
+    bool error = false,
+    Color? color,
+  }) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(
+      SnackBar(
+        content:
+            Text(message),
+
+        backgroundColor:
+            color ??
+                (error
+                    ? Colors.red
+                    : Colors.green),
+      ),
+    );
+  }
+
+  // ============================================================
+  // BUILD
+  // ============================================================
+
+  @override
+  Widget build(
+    BuildContext context,
+  ) {
+    return Scaffold(
+      appBar:
+          AppBar(
+        title:
+            const Text(
+          'QR Attendance',
+        ),
+      ),
+
+      body:
+          SafeArea(
+        child:
+            SingleChildScrollView(
+          padding:
+              const EdgeInsets.all(
+            16,
+          ),
+
+          child:
+              Column(
+            crossAxisAlignment:
+                CrossAxisAlignment
+                    .stretch,
+
+            children: [
+              // ==================================================
+              // INFO
+              // ==================================================
+
+              Card(
+                color:
+                    Colors.blue.shade50,
+
+                child:
+                    Padding(
+                  padding:
+                      const EdgeInsets
+                          .all(
+                    16,
+                  ),
+
+                  child:
+                      Row(
+                    crossAxisAlignment:
+                        CrossAxisAlignment
+                            .start,
+
+                    children: [
+                      Icon(
+                        Icons
+                            .qr_code_scanner,
+
+                        color:
+                            Colors.blue
+                                .shade700,
+
+                        size:
+                            34,
+                      ),
+
+                      const SizedBox(
+                        width:
+                            12,
+                      ),
+
+                      const Expanded(
+                        child:
+                            Column(
+                          crossAxisAlignment:
+                              CrossAxisAlignment
+                                  .start,
+
+                          children: [
+                            Text(
+                              'Live QR Attendance',
+
+                              style:
+                                  TextStyle(
+                                fontSize:
+                                    17,
+                                fontWeight:
+                                    FontWeight
+                                        .bold,
+                              ),
+                            ),
+
+                            SizedBox(
+                              height:
+                                  5,
+                            ),
+
+                            Text(
+                              'QR changes every 1 second. Faculty/HOD must manually close the attendance session.',
+
+                              style:
+                                  TextStyle(
+                                fontSize:
+                                    12,
+                                color:
+                                    Colors.grey,
+                                height:
+                                    1.4,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              const SizedBox(
+                height:
+                    16,
+              ),
+
+              // ==================================================
+              // SEMESTER
+              // ==================================================
+
+              DropdownButtonFormField<
+                  String>(
+                initialValue:
+                    _selectedSemester,
+
+                isExpanded:
+                    true,
+
+                decoration:
+                    InputDecoration(
+                  labelText:
+                      'Semester',
+
+                  prefixIcon:
+                      const Icon(
+                    Icons
+                        .school_outlined,
+                  ),
+
+                  border:
+                      OutlineInputBorder(
+                    borderRadius:
+                        BorderRadius
+                            .circular(
+                      12,
+                    ),
+                  ),
+                ),
+
+                items:
+                    _semesters
+                        .map(
+                  (
+                    String semester,
+                  ) {
+                    return DropdownMenuItem<
+                        String>(
+                      value:
+                          semester,
+
+                      child:
+                          Text(
+                        semester,
+                        overflow:
+                            TextOverflow
+                                .ellipsis,
+                      ),
+                    );
+                  },
+                ).toList(),
+
+                onChanged:
+                    _changeSemester,
+              ),
+
+              const SizedBox(
+                height:
+                    16,
+              ),
+
+              // ==================================================
+              // SUBJECT
+              // ==================================================
+
+              _buildSubjectDropdown(),
+
+              const SizedBox(
+                height:
+                    20,
+              ),
+
+              // ==================================================
+              // GENERATE
+              // ==================================================
+
+              SizedBox(
+                height:
+                    52,
+
+                child:
+                    ElevatedButton.icon(
+                  onPressed:
+                      _generatingQR
+                          ? null
+                          : _generateAttendanceQR,
+
+                  icon:
+                      _generatingQR
+                          ? const SizedBox(
+                              width:
+                                  20,
+                              height:
+                                  20,
+
+                              child:
+                                  CircularProgressIndicator(
+                                color:
+                                    Colors.white,
+
+                                strokeWidth:
+                                    2,
+                              ),
+                            )
+                          : const Icon(
+                              Icons
+                                  .qr_code_2,
+                            ),
+
+                  label:
+                      Text(
+                    _generatingQR
+                        ? 'Generating...'
+                        : 'Generate Live QR',
+
+                    style:
+                        const TextStyle(
+                      fontWeight:
+                          FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
+
+              const SizedBox(
+                height:
+                    20,
+              ),
+
+              // ==================================================
+              // QR CARD
+              // ==================================================
+
+              if (_sessionId != null)
+                _buildLiveQrCard(),
+            ],
+          ),
         ),
       ),
     );

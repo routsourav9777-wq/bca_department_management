@@ -52,7 +52,7 @@ class _FacultyUploadNotesScreenState extends State<FacultyUploadNotesScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 DropdownButtonFormField<String>(
-                  value: _selectedSem,
+                  initialValue: _selectedSem,
                   decoration:
                       const InputDecoration(labelText: 'Target Semester'),
                   items: AppConstants.semesters

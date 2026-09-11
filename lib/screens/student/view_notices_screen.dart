@@ -265,7 +265,7 @@ class StudentViewNoticesScreen extends StatelessWidget {
                           Container(
                             padding: const EdgeInsets.all(10),
                             decoration: BoxDecoration(
-                              color: Colors.deepPurple.withOpacity(0.10),
+                              color: Colors.deepPurple.withValues(alpha: 0.10),
                               borderRadius: BorderRadius.circular(10),
                             ),
                             child: const Icon(

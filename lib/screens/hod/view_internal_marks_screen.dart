@@ -36,7 +36,7 @@ class _ViewInternalMarksScreenState extends State<ViewInternalMarksScreen> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: DropdownButtonFormField<String>(
-                    value: _selectedSem,
+                    initialValue: _selectedSem,
                     decoration: const InputDecoration(contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
                     items: AppConstants.semesters
                         .map((s) => DropdownMenuItem(value: s, child: Text(s)))
@@ -64,7 +64,7 @@ class _ViewInternalMarksScreenState extends State<ViewInternalMarksScreen> {
                     leading: Container(
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
-                        color: AppTheme.primaryBlue.withOpacity(0.1),
+                        color: AppTheme.primaryBlue.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: Text(

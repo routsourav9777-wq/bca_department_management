@@ -582,7 +582,7 @@ class _ManageFacultyScreenState extends State<ManageFacultyScreen> {
                   contentPadding: const EdgeInsets.all(16),
                   leading: CircleAvatar(
                     radius: 26,
-                    backgroundColor: AppTheme.primaryBlue.withOpacity(0.1),
+                    backgroundColor: AppTheme.primaryBlue.withValues(alpha: 0.1),
                     child: Text(
                       name
                           .split(' ')

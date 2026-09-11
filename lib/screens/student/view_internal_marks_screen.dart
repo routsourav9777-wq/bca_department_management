@@ -25,7 +25,7 @@ class StudentViewInternalMarksScreen extends StatelessWidget {
               contentPadding: const EdgeInsets.all(16),
               leading: CircleAvatar(
                 radius: 24,
-                backgroundColor: AppTheme.primaryBlue.withOpacity(0.1),
+                backgroundColor: AppTheme.primaryBlue.withValues(alpha: 0.1),
                 child: Text('${m['obtained']}', style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.primaryBlue)),
               ),
               title: Text(m['subject']!, style: const TextStyle(fontWeight: FontWeight.bold)),

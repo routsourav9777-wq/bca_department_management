@@ -7,6 +7,8 @@ import '../auth/login_screen.dart';
 import '../hod/approve_registrations_screen.dart';
 import '../hod/upload_notice_screen.dart';
 import '../hod/upload_notes_screen.dart';
+import '../hod/view_attendance_reports_screen.dart';
+import '../settings/settings_screen.dart';
 
 import 'mark_attendance_screen.dart';
 import 'view_students_screen.dart';
@@ -55,7 +57,9 @@ class FacultyDashboardScreen extends StatelessWidget {
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Logout failed: $e'),
+          content: Text(
+            'Logout failed: $e',
+          ),
           backgroundColor: Colors.red,
         ),
       );
@@ -82,6 +86,21 @@ class FacultyDashboardScreen extends StatelessWidget {
         'faculty',
       ],
     ).snapshots();
+  }
+
+  // ============================================================
+  // OPEN SETTINGS
+  // ============================================================
+
+  void _openSettings(
+    BuildContext context,
+  ) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const SettingsScreen(),
+      ),
+    );
   }
 
   // ============================================================
@@ -117,12 +136,28 @@ class FacultyDashboardScreen extends StatelessWidget {
         ),
         actions: [
           // ======================================================
-          // 🔔 NOTIFICATION BELL
+          // SETTINGS
+          // ======================================================
+
+          IconButton(
+            tooltip: 'Settings',
+            icon: const Icon(
+              Icons.settings_outlined,
+              size: 26,
+            ),
+            onPressed: () => _openSettings(context),
+          ),
+
+          // ======================================================
+          // NOTIFICATION BELL
           // ======================================================
 
           StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
             stream: _facultyNotifications(),
-            builder: (context, snapshot) {
+            builder: (
+              context,
+              snapshot,
+            ) {
               final int count = snapshot.data?.docs.length ?? 0;
 
               return Stack(
@@ -144,9 +179,9 @@ class FacultyDashboardScreen extends StatelessWidget {
                     },
                   ),
 
-                  // ==========================================
+                  // ==================================================
                   // RED BADGE
-                  // ==========================================
+                  // ==================================================
 
                   if (count > 0)
                     Positioned(
@@ -459,6 +494,44 @@ class FacultyDashboardScreen extends StatelessWidget {
                         );
                       },
                     ),
+
+                    // ==============================================
+                    // 7. VIEW ATTENDANCE REPORT
+                    // ==============================================
+
+                    _buildActionCard(
+                      title: 'View Attendance',
+                      subtitle: 'Attendance Reports',
+                      icon: Icons.assessment,
+                      color: Colors.deepPurple,
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const ViewAttendanceReportsScreen(),
+                          ),
+                        );
+                      },
+                    ),
+
+                    // ==============================================
+                    // 8. SETTINGS
+                    // ==============================================
+
+                    _buildActionCard(
+                      title: 'Settings',
+                      subtitle: 'Account & App Settings',
+                      icon: Icons.settings_outlined,
+                      color: Colors.blueGrey,
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const SettingsScreen(),
+                          ),
+                        );
+                      },
+                    ),
                   ],
                 ),
 
@@ -657,22 +730,20 @@ class FacultyDashboardScreen extends StatelessWidget {
       elevation: 2,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(
-          16,
-        ),
+        borderRadius: BorderRadius.circular(16),
         child: Padding(
-          padding: const EdgeInsets.all(
-            10,
-          ),
+          padding: const EdgeInsets.all(10),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisAlignment: MainAxisAlignment.center,
             mainAxisSize: MainAxisSize.min,
             children: [
+              // ==================================================
+              // ICON
+              // ==================================================
+
               Container(
-                padding: const EdgeInsets.all(
-                  7,
-                ),
+                padding: const EdgeInsets.all(7),
                 decoration: BoxDecoration(
                   color: color.withValues(
                     alpha: 0.12,
@@ -687,9 +758,15 @@ class FacultyDashboardScreen extends StatelessWidget {
                   size: 22,
                 ),
               ),
+
               const SizedBox(
                 height: 7,
               ),
+
+              // ==================================================
+              // TITLE
+              // ==================================================
+
               Text(
                 title,
                 maxLines: 2,
@@ -700,9 +777,15 @@ class FacultyDashboardScreen extends StatelessWidget {
                   color: AppTheme.textPrimary,
                 ),
               ),
+
               const SizedBox(
                 height: 2,
               ),
+
+              // ==================================================
+              // SUBTITLE
+              // ==================================================
+
               Text(
                 subtitle,
                 maxLines: 2,
@@ -782,7 +865,9 @@ class FacultyNotificationsScreen extends StatelessWidget {
   // ============================================================
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(
+    BuildContext context,
+  ) {
     return Scaffold(
       appBar: AppBar(
         title: const Text(
@@ -791,7 +876,9 @@ class FacultyNotificationsScreen extends StatelessWidget {
       ),
       body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
         stream: FirebaseFirestore.instance
-            .collection('notifications')
+            .collection(
+              'notifications',
+            )
             .where(
               'department',
               isEqualTo: 'BCA',
@@ -803,7 +890,10 @@ class FacultyNotificationsScreen extends StatelessWidget {
             'faculty',
           ],
         ).snapshots(),
-        builder: (context, snapshot) {
+        builder: (
+          context,
+          snapshot,
+        ) {
           // ======================================================
           // LOADING
           // ======================================================
@@ -821,7 +911,9 @@ class FacultyNotificationsScreen extends StatelessWidget {
           if (snapshot.hasError) {
             return Center(
               child: Padding(
-                padding: const EdgeInsets.all(24),
+                padding: const EdgeInsets.all(
+                  24,
+                ),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -907,7 +999,10 @@ class FacultyNotificationsScreen extends StatelessWidget {
           );
 
           notifications.sort(
-            (a, b) {
+            (
+              a,
+              b,
+            ) {
               final dynamic aTime = a.data()['createdAt'];
 
               final dynamic bTime = b.data()['createdAt'];
@@ -929,7 +1024,10 @@ class FacultyNotificationsScreen extends StatelessWidget {
           return ListView.builder(
             padding: const EdgeInsets.all(16),
             itemCount: notifications.length,
-            itemBuilder: (context, index) {
+            itemBuilder: (
+              context,
+              index,
+            ) {
               final data = notifications[index].data();
 
               final String title = data['title']?.toString() ?? 'Notification';

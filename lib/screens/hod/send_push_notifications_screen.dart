@@ -370,8 +370,8 @@ class _SendPushNotificationsScreenState
                           10,
                         ),
                         decoration: BoxDecoration(
-                          color: Colors.redAccent.withOpacity(
-                            0.10,
+                          color: Colors.redAccent.withValues(
+                            alpha: 0.10,
                           ),
                           borderRadius: BorderRadius.circular(
                             12,

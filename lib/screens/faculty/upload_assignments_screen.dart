@@ -48,7 +48,7 @@ class _UploadAssignmentsScreenState extends State<UploadAssignmentsScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 DropdownButtonFormField<String>(
-                  value: _selectedSem,
+                  initialValue: _selectedSem,
                   decoration: const InputDecoration(labelText: 'Target Semester'),
                   items: AppConstants.semesters.map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
                   onChanged: (val) { if (val != null) setState(() => _selectedSem = val); },

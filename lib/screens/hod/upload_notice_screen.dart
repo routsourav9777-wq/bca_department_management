@@ -5,6 +5,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/theme/app_theme.dart';
 
@@ -42,12 +43,12 @@ class _UploadNoticeScreenState extends State<UploadNoticeScreen> {
 
   String _selectedSemester = 'Semester 1';
 
-  // Camera image
+  String _filterSemester = 'All';
+
   File? _selectedCameraImage;
 
   String? _selectedImageName;
 
-  // PDF
   File? _selectedPdfFile;
 
   String? _selectedPdfName;
@@ -55,7 +56,7 @@ class _UploadNoticeScreenState extends State<UploadNoticeScreen> {
   bool _isUploading = false;
 
   // ============================================================
-  // SEMESTER 1 - 6
+  // SEMESTERS
   // ============================================================
 
   final List<String> _semesters = [
@@ -72,6 +73,8 @@ class _UploadNoticeScreenState extends State<UploadNoticeScreen> {
   // ============================================================
 
   Future<void> _openCamera() async {
+    if (_isUploading) return;
+
     try {
       final XFile? image = await _imagePicker.pickImage(
         source: ImageSource.camera,
@@ -83,28 +86,29 @@ class _UploadNoticeScreenState extends State<UploadNoticeScreen> {
         return;
       }
 
-      setState(() {
-        _selectedCameraImage = File(image.path);
+      final File file = File(image.path);
 
+      if (!await file.exists()) {
+        _showMessage(
+          'Captured image was not found.',
+          Colors.red,
+        );
+        return;
+      }
+
+      setState(() {
+        _selectedCameraImage = file;
         _selectedImageName = image.name;
       });
 
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Photo captured successfully'),
-          backgroundColor: Colors.green,
-        ),
+      _showMessage(
+        'Photo captured successfully.',
+        Colors.green,
       );
     } catch (e) {
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Camera error: $e'),
-          backgroundColor: Colors.red,
-        ),
+      _showMessage(
+        'Camera error:\n$e',
+        Colors.red,
       );
     }
   }
@@ -114,50 +118,57 @@ class _UploadNoticeScreenState extends State<UploadNoticeScreen> {
   // ============================================================
 
   Future<void> _pickPdf() async {
+    if (_isUploading) return;
+
     try {
-      final result = await FilePicker.platform.pickFiles(
+      final FilePickerResult? result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['pdf'],
         withData: false,
       );
 
-      if (result == null || result.files.single.path == null) {
+      if (result == null ||
+          result.files.isEmpty ||
+          result.files.single.path == null) {
         return;
       }
 
-      final pickedFile = result.files.single;
+      final PlatformFile pickedFile = result.files.single;
+
+      final File file = File(pickedFile.path!);
+
+      if (!await file.exists()) {
+        _showMessage(
+          'Selected PDF file was not found.',
+          Colors.red,
+        );
+        return;
+      }
 
       setState(() {
-        _selectedPdfFile = File(pickedFile.path!);
-
+        _selectedPdfFile = file;
         _selectedPdfName = pickedFile.name;
       });
 
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('PDF selected successfully'),
-          backgroundColor: Colors.green,
-        ),
+      _showMessage(
+        'PDF selected successfully.',
+        Colors.green,
       );
     } catch (e) {
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('PDF selection error: $e'),
-          backgroundColor: Colors.red,
-        ),
+      _showMessage(
+        'PDF selection error:\n$e',
+        Colors.red,
       );
     }
   }
 
   // ============================================================
-  // REMOVE CAMERA IMAGE
+  // REMOVE IMAGE
   // ============================================================
 
   void _removeImage() {
+    if (_isUploading) return;
+
     setState(() {
       _selectedCameraImage = null;
       _selectedImageName = null;
@@ -169,6 +180,8 @@ class _UploadNoticeScreenState extends State<UploadNoticeScreen> {
   // ============================================================
 
   void _removePdf() {
+    if (_isUploading) return;
+
     setState(() {
       _selectedPdfFile = null;
       _selectedPdfName = null;
@@ -176,7 +189,7 @@ class _UploadNoticeScreenState extends State<UploadNoticeScreen> {
   }
 
   // ============================================================
-  // UPLOAD IMAGE TO FIREBASE STORAGE
+  // UPLOAD IMAGE
   // ============================================================
 
   Future<String?> _uploadImage(
@@ -186,20 +199,30 @@ class _UploadNoticeScreenState extends State<UploadNoticeScreen> {
       return null;
     }
 
-    final fileName = 'notice_${DateTime.now().millisecondsSinceEpoch}.jpg';
+    final String fileName =
+        'notice_${DateTime.now().millisecondsSinceEpoch}.jpg';
 
     final Reference storageRef =
         _storage.ref().child('notice_images').child(noticeId).child(fileName);
 
+    final SettableMetadata metadata = SettableMetadata(
+      contentType: 'image/jpeg',
+      customMetadata: {
+        'noticeId': noticeId,
+        'type': 'notice_image',
+      },
+    );
+
     await storageRef.putFile(
       _selectedCameraImage!,
+      metadata,
     );
 
     return await storageRef.getDownloadURL();
   }
 
   // ============================================================
-  // UPLOAD PDF TO FIREBASE STORAGE
+  // UPLOAD PDF
   // ============================================================
 
   Future<String?> _uploadPdf(
@@ -209,13 +232,22 @@ class _UploadNoticeScreenState extends State<UploadNoticeScreen> {
       return null;
     }
 
-    final safeFileName = _selectedPdfName ?? 'notice_document.pdf';
+    final String fileName = _selectedPdfName ?? 'notice_document.pdf';
 
     final Reference storageRef =
-        _storage.ref().child('notice_pdfs').child(noticeId).child(safeFileName);
+        _storage.ref().child('notice_pdfs').child(noticeId).child(fileName);
+
+    final SettableMetadata metadata = SettableMetadata(
+      contentType: 'application/pdf',
+      customMetadata: {
+        'noticeId': noticeId,
+        'type': 'notice_pdf',
+      },
+    );
 
     await storageRef.putFile(
       _selectedPdfFile!,
+      metadata,
     );
 
     return await storageRef.getDownloadURL();
@@ -226,9 +258,11 @@ class _UploadNoticeScreenState extends State<UploadNoticeScreen> {
   // ============================================================
 
   Future<void> _publishNotice() async {
-    final title = _titleController.text.trim();
+    if (_isUploading) return;
 
-    final content = _contentController.text.trim();
+    final String title = _titleController.text.trim();
+
+    final String content = _contentController.text.trim();
 
     // ==========================================================
     // VALIDATION
@@ -236,17 +270,21 @@ class _UploadNoticeScreenState extends State<UploadNoticeScreen> {
 
     if (title.isEmpty) {
       _showError(
-        'Please enter notice title',
+        'Please enter notice title.',
       );
       return;
     }
 
     if (content.isEmpty) {
       _showError(
-        'Please enter notice content',
+        'Please enter notice content.',
       );
       return;
     }
+
+    // ==========================================================
+    // START UPLOAD
+    // ==========================================================
 
     setState(() {
       _isUploading = true;
@@ -254,12 +292,13 @@ class _UploadNoticeScreenState extends State<UploadNoticeScreen> {
 
     try {
       // ========================================================
-      // CREATE FIRESTORE DOCUMENT FIRST
+      // CREATE DOCUMENT
       // ========================================================
 
-      final noticeRef = _firestore.collection('notices').doc();
+      final DocumentReference<Map<String, dynamic>> noticeRef =
+          _firestore.collection('notices').doc();
 
-      final noticeId = noticeRef.id;
+      final String noticeId = noticeRef.id;
 
       // ========================================================
       // UPLOAD IMAGE
@@ -268,7 +307,9 @@ class _UploadNoticeScreenState extends State<UploadNoticeScreen> {
       String? imageUrl;
 
       if (_selectedCameraImage != null) {
-        imageUrl = await _uploadImage(noticeId);
+        imageUrl = await _uploadImage(
+          noticeId,
+        );
       }
 
       // ========================================================
@@ -278,11 +319,31 @@ class _UploadNoticeScreenState extends State<UploadNoticeScreen> {
       String? pdfUrl;
 
       if (_selectedPdfFile != null) {
-        pdfUrl = await _uploadPdf(noticeId);
+        pdfUrl = await _uploadPdf(
+          noticeId,
+        );
       }
 
       // ========================================================
-      // SAVE NOTICE TO FIRESTORE
+      // IMPORTANT SEMESTER LOGIC
+      // ========================================================
+      //
+      // Students Only:
+      //     Save selected semester.
+      //
+      // All Students & Faculty:
+      //     Save "All".
+      //
+      // Faculty Members Only:
+      //     Save "All".
+      //
+      // ========================================================
+
+      final String semesterToSave =
+          _targetAudience == 'Students Only' ? _selectedSemester : 'All';
+
+      // ========================================================
+      // SAVE FIRESTORE
       // ========================================================
 
       await noticeRef.set({
@@ -290,9 +351,13 @@ class _UploadNoticeScreenState extends State<UploadNoticeScreen> {
         'title': title,
         'content': content,
         'targetAudience': _targetAudience,
-        'semester': _selectedSemester,
+
+        // Fixed semester logic
+        'semester': semesterToSave,
+
         'department': 'BCA',
         'imageUrl': imageUrl,
+        'imageName': _selectedImageName,
         'pdfUrl': pdfUrl,
         'pdfName': _selectedPdfName,
         'createdAt': FieldValue.serverTimestamp(),
@@ -303,17 +368,9 @@ class _UploadNoticeScreenState extends State<UploadNoticeScreen> {
 
       if (!mounted) return;
 
-      setState(() {
-        _isUploading = false;
-      });
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Department Notice Published Successfully!',
-          ),
-          backgroundColor: Colors.green,
-        ),
+      _showMessage(
+        'Department Notice Published Successfully!',
+        Colors.green,
       );
 
       // ========================================================
@@ -321,6 +378,7 @@ class _UploadNoticeScreenState extends State<UploadNoticeScreen> {
       // ========================================================
 
       _titleController.clear();
+
       _contentController.clear();
 
       setState(() {
@@ -333,9 +391,11 @@ class _UploadNoticeScreenState extends State<UploadNoticeScreen> {
         _targetAudience = 'All Students & Faculty';
 
         _selectedSemester = 'Semester 1';
+
+        _isUploading = false;
       });
 
-      Navigator.pop(context);
+      // StreamBuilder automatically updates.
     } catch (e) {
       if (!mounted) return;
 
@@ -350,15 +410,765 @@ class _UploadNoticeScreenState extends State<UploadNoticeScreen> {
   }
 
   // ============================================================
-  // ERROR
+  // DELETE NOTICE
   // ============================================================
 
-  void _showError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.red,
+  Future<void> _deleteNotice(
+    DocumentSnapshot<Map<String, dynamic>> doc,
+  ) async {
+    if (_isUploading) return;
+
+    final Map<String, dynamic> data = doc.data() ?? {};
+
+    final String noticeId = (data['noticeId'] ?? doc.id).toString();
+
+    final String title = (data['title'] ?? 'this notice').toString();
+
+    // ==========================================================
+    // CONFIRM
+    // ==========================================================
+
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (
+        dialogContext,
+      ) {
+        return AlertDialog(
+          title: const Text(
+            'Delete Notice?',
+          ),
+          content: Text(
+            'Are you sure you want to delete "$title"?\n\n'
+            'The notice and its attached PDF/image '
+            'will also be deleted.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(
+                  dialogContext,
+                  false,
+                );
+              },
+              child: const Text(
+                'CANCEL',
+              ),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(
+                  dialogContext,
+                  true,
+                );
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+                foregroundColor: Colors.white,
+                minimumSize: Size.zero,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 10,
+                ),
+              ),
+              child: const Text(
+                'DELETE',
+              ),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed != true) {
+      return;
+    }
+
+    if (!mounted) return;
+
+    setState(() {
+      _isUploading = true;
+    });
+
+    try {
+      // ========================================================
+      // DELETE IMAGE STORAGE
+      // ========================================================
+
+      try {
+        final Reference imageFolder =
+            _storage.ref().child('notice_images').child(noticeId);
+
+        final ListResult imageFiles = await imageFolder.listAll();
+
+        for (final Reference file in imageFiles.items) {
+          try {
+            await file.delete();
+          } catch (e) {
+            debugPrint(
+              'Notice image delete error: $e',
+            );
+          }
+        }
+      } catch (e) {
+        debugPrint(
+          'Notice image folder error: $e',
+        );
+      }
+
+      // ========================================================
+      // DELETE PDF STORAGE
+      // ========================================================
+
+      try {
+        final Reference pdfFolder =
+            _storage.ref().child('notice_pdfs').child(noticeId);
+
+        final ListResult pdfFiles = await pdfFolder.listAll();
+
+        for (final Reference file in pdfFiles.items) {
+          try {
+            await file.delete();
+          } catch (e) {
+            debugPrint(
+              'Notice PDF delete error: $e',
+            );
+          }
+        }
+      } catch (e) {
+        debugPrint(
+          'Notice PDF folder error: $e',
+        );
+      }
+
+      // ========================================================
+      // DELETE FIRESTORE DOCUMENT
+      // ========================================================
+
+      await _firestore.collection('notices').doc(doc.id).delete();
+
+      if (!mounted) return;
+
+      setState(() {
+        _isUploading = false;
+      });
+
+      _showMessage(
+        'Notice deleted successfully.',
+        Colors.green,
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        _isUploading = false;
+      });
+
+      _showError(
+        'Failed to delete notice:\n$e',
+      );
+    }
+  }
+
+  // ============================================================
+  // VIEW PDF
+  // ============================================================
+
+  Future<void> _viewPdf(
+    String url,
+    String title,
+  ) async {
+    final String cleanUrl = url.trim();
+
+    if (cleanUrl.isEmpty) {
+      _showError(
+        'PDF link is not available.',
+      );
+      return;
+    }
+
+    final Uri? uri = Uri.tryParse(cleanUrl);
+
+    if (uri == null || (uri.scheme != 'https' && uri.scheme != 'http')) {
+      _showError(
+        'Invalid PDF link.',
+      );
+      return;
+    }
+
+    try {
+      final bool launched = await launchUrl(
+        uri,
+        mode: LaunchMode.externalApplication,
+      );
+
+      if (!launched) {
+        _showError(
+          'Unable to open PDF.',
+        );
+      }
+    } catch (e) {
+      _showError(
+        'Unable to open PDF:\n$e',
+      );
+    }
+  }
+
+  // ============================================================
+  // VIEW IMAGE
+  // ============================================================
+
+  void _viewImage(
+    String url,
+    String title,
+  ) {
+    final String cleanUrl = url.trim();
+
+    if (cleanUrl.isEmpty) {
+      _showError(
+        'Image link is not available.',
+      );
+      return;
+    }
+
+    showDialog(
+      context: context,
+      builder: (
+        dialogContext,
+      ) {
+        return Dialog(
+          backgroundColor: Colors.black,
+          insetPadding: const EdgeInsets.all(
+            12,
+          ),
+          child: Stack(
+            children: [
+              InteractiveViewer(
+                minScale: 0.5,
+                maxScale: 5,
+                child: Image.network(
+                  cleanUrl,
+                  width: double.infinity,
+                  fit: BoxFit.contain,
+                  loadingBuilder: (
+                    context,
+                    child,
+                    loadingProgress,
+                  ) {
+                    if (loadingProgress == null) {
+                      return child;
+                    }
+
+                    return const SizedBox(
+                      height: 450,
+                      child: Center(
+                        child: CircularProgressIndicator(
+                          color: Colors.white,
+                        ),
+                      ),
+                    );
+                  },
+                  errorBuilder: (
+                    context,
+                    error,
+                    stackTrace,
+                  ) {
+                    return const SizedBox(
+                      height: 450,
+                      child: Center(
+                        child: Text(
+                          'Unable to load image.',
+                          style: TextStyle(
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              Positioned(
+                top: 4,
+                right: 4,
+                child: IconButton(
+                  onPressed: () {
+                    Navigator.pop(
+                      dialogContext,
+                    );
+                  },
+                  icon: const Icon(
+                    Icons.close,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  // ============================================================
+  // FORMAT DATE
+  // ============================================================
+
+  String _formatDate(
+    dynamic value,
+  ) {
+    if (value == null) {
+      return 'Date unavailable';
+    }
+
+    if (value is Timestamp) {
+      final DateTime date = value.toDate();
+
+      final String day = date.day.toString().padLeft(
+            2,
+            '0',
+          );
+
+      final String month = date.month.toString().padLeft(
+            2,
+            '0',
+          );
+
+      return '$day/$month/${date.year}';
+    }
+
+    return value.toString();
+  }
+
+  // ============================================================
+  // NOTICE CARD
+  // ============================================================
+
+  Widget _buildNoticeCard(
+    DocumentSnapshot<Map<String, dynamic>> doc,
+  ) {
+    final Map<String, dynamic> data = doc.data() ?? {};
+
+    final String title = (data['title'] ?? 'Untitled Notice').toString();
+
+    final String content = (data['content'] ?? '').toString();
+
+    final String semester = (data['semester'] ?? '').toString();
+
+    final String audience =
+        (data['targetAudience'] ?? 'All Students & Faculty').toString();
+
+    final String pdfUrl = (data['pdfUrl'] ?? '').toString();
+
+    final String pdfName = (data['pdfName'] ?? '').toString();
+
+    final String imageUrl = (data['imageUrl'] ?? '').toString();
+
+    final String imageName = (data['imageName'] ?? '').toString();
+
+    final String date = _formatDate(
+      data['createdAt'],
+    );
+
+    final bool hasPdf = pdfUrl.trim().isNotEmpty;
+
+    final bool hasImage = imageUrl.trim().isNotEmpty;
+
+    return Card(
+      margin: const EdgeInsets.only(
+        bottom: 12,
       ),
+      elevation: 2,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(
+          14,
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(
+          14,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // ==================================================
+            // HEADER
+            // ==================================================
+
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 46,
+                  height: 46,
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withValues(
+                      alpha: 0.12,
+                    ),
+                    borderRadius: BorderRadius.circular(
+                      12,
+                    ),
+                  ),
+                  child: const Icon(
+                    Icons.campaign_outlined,
+                    color: Colors.orange,
+                    size: 27,
+                  ),
+                ),
+
+                const SizedBox(
+                  width: 12,
+                ),
+
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(
+                        height: 5,
+                      ),
+                      Text(
+                        semester.isEmpty ? 'Semester not specified' : semester,
+                        style: const TextStyle(
+                          color: AppTheme.primaryBlue,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // ==================================================
+                // DELETE
+                // ==================================================
+
+                SizedBox(
+                  width: 42,
+                  height: 42,
+                  child: IconButton(
+                    tooltip: 'Delete notice',
+                    padding: EdgeInsets.zero,
+                    onPressed: _isUploading
+                        ? null
+                        : () => _deleteNotice(
+                              doc,
+                            ),
+                    icon: const Icon(
+                      Icons.delete_outline,
+                      color: Colors.red,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+
+            const SizedBox(
+              height: 10,
+            ),
+
+            // ==================================================
+            // AUDIENCE
+            // ==================================================
+
+            Row(
+              children: [
+                const Icon(
+                  Icons.people_outline,
+                  size: 16,
+                  color: Colors.grey,
+                ),
+                const SizedBox(
+                  width: 5,
+                ),
+                Expanded(
+                  child: Text(
+                    audience,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+
+            const SizedBox(
+              height: 6,
+            ),
+
+            // ==================================================
+            // DATE
+            // ==================================================
+
+            Row(
+              children: [
+                const Icon(
+                  Icons.access_time,
+                  size: 15,
+                  color: Colors.grey,
+                ),
+                const SizedBox(
+                  width: 5,
+                ),
+                Text(
+                  date,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: Colors.grey,
+                  ),
+                ),
+              ],
+            ),
+
+            // ==================================================
+            // CONTENT
+            // ==================================================
+
+            if (content.trim().isNotEmpty) ...[
+              const SizedBox(
+                height: 12,
+              ),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(
+                  12,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.grey.withValues(
+                    alpha: 0.05,
+                  ),
+                  borderRadius: BorderRadius.circular(
+                    10,
+                  ),
+                ),
+                child: Text(
+                  content,
+                  maxLines: 5,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    height: 1.4,
+                  ),
+                ),
+              ),
+            ],
+
+            // ==================================================
+            // ATTACHMENTS
+            // ==================================================
+
+            if (hasPdf || hasImage) ...[
+              const SizedBox(
+                height: 12,
+              ),
+              Row(
+                children: [
+                  // ==================================================
+                  // PDF
+                  // ==================================================
+
+                  if (hasPdf)
+                    Expanded(
+                      child: Container(
+                        padding: const EdgeInsets.all(
+                          10,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.red.withValues(
+                            alpha: 0.05,
+                          ),
+                          borderRadius: BorderRadius.circular(
+                            10,
+                          ),
+                          border: Border.all(
+                            color: Colors.red.withValues(
+                              alpha: 0.15,
+                            ),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.picture_as_pdf,
+                              color: Colors.red,
+                              size: 25,
+                            ),
+                            const SizedBox(
+                              width: 7,
+                            ),
+                            Expanded(
+                              child: Text(
+                                pdfName.isEmpty ? 'PDF' : pdfName,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(
+                              width: 5,
+                            ),
+                            SizedBox(
+                              width: 58,
+                              height: 36,
+                              child: OutlinedButton(
+                                onPressed: () {
+                                  _viewPdf(
+                                    pdfUrl,
+                                    pdfName.isEmpty ? title : pdfName,
+                                  );
+                                },
+                                style: OutlinedButton.styleFrom(
+                                  minimumSize: Size.zero,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 4,
+                                  ),
+                                ),
+                                child: const Text(
+                                  'VIEW',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+
+                  if (hasPdf && hasImage)
+                    const SizedBox(
+                      width: 8,
+                    ),
+
+                  // ==================================================
+                  // IMAGE
+                  // ==================================================
+
+                  if (hasImage)
+                    Expanded(
+                      child: Container(
+                        padding: const EdgeInsets.all(
+                          10,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.green.withValues(
+                            alpha: 0.05,
+                          ),
+                          borderRadius: BorderRadius.circular(
+                            10,
+                          ),
+                          border: Border.all(
+                            color: Colors.green.withValues(
+                              alpha: 0.15,
+                            ),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.image,
+                              color: Colors.green,
+                              size: 25,
+                            ),
+                            const SizedBox(
+                              width: 7,
+                            ),
+                            Expanded(
+                              child: Text(
+                                imageName.isEmpty ? 'Image' : imageName,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(
+                              width: 5,
+                            ),
+                            SizedBox(
+                              width: 58,
+                              height: 36,
+                              child: OutlinedButton(
+                                onPressed: () {
+                                  _viewImage(
+                                    imageUrl,
+                                    imageName.isEmpty ? title : imageName,
+                                  );
+                                },
+                                style: OutlinedButton.styleFrom(
+                                  minimumSize: Size.zero,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 4,
+                                  ),
+                                ),
+                                child: const Text(
+                                  'VIEW',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ============================================================
+  // MESSAGE
+  // ============================================================
+
+  void _showMessage(
+    String message,
+    Color color,
+  ) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(
+      context,
+    ).hideCurrentSnackBar();
+
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(
+      SnackBar(
+        content: Text(
+          message,
+        ),
+        backgroundColor: color,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  void _showError(
+    String message,
+  ) {
+    _showMessage(
+      message,
+      Colors.red,
     );
   }
 
@@ -379,7 +1189,9 @@ class _UploadNoticeScreenState extends State<UploadNoticeScreen> {
   // ============================================================
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(
+    BuildContext context,
+  ) {
     return Scaffold(
       appBar: AppBar(
         title: const Text(
@@ -387,13 +1199,21 @@ class _UploadNoticeScreenState extends State<UploadNoticeScreen> {
         ),
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(
+          20,
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            // ==================================================
+            // UPLOAD FORM
+            // ==================================================
+
             Card(
               child: Padding(
-                padding: const EdgeInsets.all(20),
+                padding: const EdgeInsets.all(
+                  20,
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -405,7 +1225,9 @@ class _UploadNoticeScreenState extends State<UploadNoticeScreen> {
                       ),
                     ),
 
-                    const SizedBox(height: 4),
+                    const SizedBox(
+                      height: 4,
+                    ),
 
                     const Text(
                       'This notice will be visible on student & faculty portals.',
@@ -425,10 +1247,13 @@ class _UploadNoticeScreenState extends State<UploadNoticeScreen> {
 
                     TextField(
                       controller: _titleController,
+                      enabled: !_isUploading,
                       decoration: const InputDecoration(
                         labelText: 'Notice Title',
                         hintText: 'e.g. Mid-Sem Examination Schedule 2026',
-                        prefixIcon: Icon(Icons.title),
+                        prefixIcon: Icon(
+                          Icons.title,
+                        ),
                       ),
                     ),
 
@@ -437,14 +1262,16 @@ class _UploadNoticeScreenState extends State<UploadNoticeScreen> {
                     ),
 
                     // ==================================================
-                    // TARGET AUDIENCE
+                    // AUDIENCE
                     // ==================================================
 
                     DropdownButtonFormField<String>(
-                      value: _targetAudience,
+                      initialValue: _targetAudience,
                       decoration: const InputDecoration(
                         labelText: 'Audience / Target',
-                        prefixIcon: Icon(Icons.people),
+                        prefixIcon: Icon(
+                          Icons.people,
+                        ),
                       ),
                       items: const [
                         DropdownMenuItem(
@@ -470,49 +1297,60 @@ class _UploadNoticeScreenState extends State<UploadNoticeScreen> {
                           ? null
                           : (value) {
                               if (value != null) {
-                                setState(() {
-                                  _targetAudience = value;
-                                });
+                                setState(
+                                  () {
+                                    _targetAudience = value;
+                                  },
+                                );
                               }
                             },
                     ),
 
-                    const SizedBox(
-                      height: 16,
-                    ),
-
                     // ==================================================
-                    // SEMESTER 1 - 6
+                    // SEMESTER
+                    //
+                    // IMPORTANT:
+                    // Only Students Only will show semester.
                     // ==================================================
 
-                    DropdownButtonFormField<String>(
-                      value: _selectedSemester,
-                      decoration: const InputDecoration(
-                        labelText: 'Select Semester',
-                        prefixIcon: Icon(
-                          Icons.school_outlined,
-                        ),
+                    if (_targetAudience == 'Students Only') ...[
+                      const SizedBox(
+                        height: 16,
                       ),
-                      items: _semesters
-                          .map(
-                            (semester) => DropdownMenuItem<String>(
-                              value: semester,
-                              child: Text(
+                      DropdownButtonFormField<String>(
+                        initialValue: _selectedSemester,
+                        decoration: const InputDecoration(
+                          labelText: 'Select Semester',
+                          prefixIcon: Icon(
+                            Icons.school_outlined,
+                          ),
+                        ),
+                        items: _semesters
+                            .map(
+                              (
                                 semester,
+                              ) =>
+                                  DropdownMenuItem<String>(
+                                value: semester,
+                                child: Text(
+                                  semester,
+                                ),
                               ),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: _isUploading
-                          ? null
-                          : (value) {
-                              if (value != null) {
-                                setState(() {
-                                  _selectedSemester = value;
-                                });
-                              }
-                            },
-                    ),
+                            )
+                            .toList(),
+                        onChanged: _isUploading
+                            ? null
+                            : (value) {
+                                if (value != null) {
+                                  setState(
+                                    () {
+                                      _selectedSemester = value;
+                                    },
+                                  );
+                                }
+                              },
+                      ),
+                    ],
 
                     const SizedBox(
                       height: 16,
@@ -524,6 +1362,7 @@ class _UploadNoticeScreenState extends State<UploadNoticeScreen> {
 
                     TextField(
                       controller: _contentController,
+                      enabled: !_isUploading,
                       maxLines: 6,
                       decoration: const InputDecoration(
                         labelText: 'Notice Content / Instructions',
@@ -576,34 +1415,21 @@ class _UploadNoticeScreenState extends State<UploadNoticeScreen> {
                                 fit: BoxFit.cover,
                               ),
                             ),
-                            Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 8,
+                            ListTile(
+                              leading: const Icon(
+                                Icons.photo_camera,
                               ),
-                              child: Row(
-                                children: [
-                                  const Icon(
-                                    Icons.photo_camera,
-                                    size: 20,
-                                  ),
-                                  const SizedBox(
-                                    width: 8,
-                                  ),
-                                  Expanded(
-                                    child: Text(
-                                      _selectedImageName ?? 'Captured Photo',
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                  IconButton(
-                                    onPressed: _removeImage,
-                                    icon: const Icon(
-                                      Icons.delete_outline,
-                                      color: Colors.red,
-                                    ),
-                                  ),
-                                ],
+                              title: Text(
+                                _selectedImageName ?? 'Captured Photo',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              trailing: IconButton(
+                                onPressed: _isUploading ? null : _removeImage,
+                                icon: const Icon(
+                                  Icons.delete_outline,
+                                  color: Colors.red,
+                                ),
                               ),
                             ),
                           ],
@@ -615,7 +1441,7 @@ class _UploadNoticeScreenState extends State<UploadNoticeScreen> {
                     ),
 
                     // ==================================================
-                    // PDF ATTACHMENT
+                    // PDF
                     // ==================================================
 
                     OutlinedButton.icon(
@@ -628,10 +1454,6 @@ class _UploadNoticeScreenState extends State<UploadNoticeScreen> {
                         _selectedPdfName ?? 'Attach Official PDF Document',
                       ),
                     ),
-
-                    // ==================================================
-                    // PDF SELECTED PREVIEW
-                    // ==================================================
 
                     if (_selectedPdfFile != null)
                       Card(
@@ -653,7 +1475,7 @@ class _UploadNoticeScreenState extends State<UploadNoticeScreen> {
                             'PDF ready to upload',
                           ),
                           trailing: IconButton(
-                            onPressed: _removePdf,
+                            onPressed: _isUploading ? null : _removePdf,
                             icon: const Icon(
                               Icons.delete_outline,
                               color: Colors.red,
@@ -667,7 +1489,7 @@ class _UploadNoticeScreenState extends State<UploadNoticeScreen> {
                     ),
 
                     // ==================================================
-                    // PUBLISH
+                    // PUBLISH BUTTON
                     // ==================================================
 
                     SizedBox(
@@ -676,8 +1498,8 @@ class _UploadNoticeScreenState extends State<UploadNoticeScreen> {
                         onPressed: _isUploading ? null : _publishNotice,
                         icon: _isUploading
                             ? const SizedBox(
-                                height: 20,
                                 width: 20,
+                                height: 20,
                                 child: CircularProgressIndicator(
                                   color: Colors.white,
                                   strokeWidth: 2,
@@ -688,7 +1510,7 @@ class _UploadNoticeScreenState extends State<UploadNoticeScreen> {
                               ),
                         label: Text(
                           _isUploading
-                              ? 'Uploading...'
+                              ? 'Publishing...'
                               : 'Publish & Broadcast Notice',
                         ),
                       ),
@@ -696,6 +1518,272 @@ class _UploadNoticeScreenState extends State<UploadNoticeScreen> {
                   ],
                 ),
               ),
+            ),
+
+            const SizedBox(
+              height: 28,
+            ),
+
+            // ==================================================
+            // UPLOADED NOTICE HEADER
+            // ==================================================
+
+            Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'Uploaded Department Notices',
+                    style: TextStyle(
+                      fontSize: 19,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+
+                // ==================================================
+                // FILTER
+                // ==================================================
+
+                Container(
+                  height: 42,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                  ),
+                  decoration: BoxDecoration(
+                    border: Border.all(
+                      color: Colors.grey.shade300,
+                    ),
+                    borderRadius: BorderRadius.circular(
+                      10,
+                    ),
+                  ),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      value: _filterSemester,
+                      isDense: true,
+                      items: [
+                        const DropdownMenuItem(
+                          value: 'All',
+                          child: Text(
+                            'All',
+                            style: TextStyle(
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                        ..._semesters.map(
+                          (
+                            semester,
+                          ) =>
+                              DropdownMenuItem<String>(
+                            value: semester,
+                            child: Text(
+                              semester,
+                              style: const TextStyle(
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                      onChanged: (
+                        value,
+                      ) {
+                        if (value == null) {
+                          return;
+                        }
+
+                        setState(
+                          () {
+                            _filterSemester = value;
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                ),
+              ],
+            ),
+
+            const SizedBox(
+              height: 12,
+            ),
+
+            // ============================================================
+            // FIRESTORE NOTICES
+            // ============================================================
+
+            StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+              stream: _firestore
+                  .collection(
+                    'notices',
+                  )
+                  .where(
+                    'department',
+                    isEqualTo: 'BCA',
+                  )
+                  .snapshots(),
+              builder: (
+                context,
+                snapshot,
+              ) {
+                // ==================================================
+                // LOADING
+                // ==================================================
+
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Card(
+                    child: Padding(
+                      padding: EdgeInsets.all(
+                        30,
+                      ),
+                      child: Center(
+                        child: CircularProgressIndicator(),
+                      ),
+                    ),
+                  );
+                }
+
+                // ==================================================
+                // ERROR
+                // ==================================================
+
+                if (snapshot.hasError) {
+                  return Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(
+                        20,
+                      ),
+                      child: Column(
+                        children: [
+                          const Icon(
+                            Icons.error_outline,
+                            color: Colors.red,
+                            size: 50,
+                          ),
+                          const SizedBox(
+                            height: 10,
+                          ),
+                          const Text(
+                            'Unable to load uploaded notices.',
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(
+                            height: 8,
+                          ),
+                          Text(
+                            '${snapshot.error}',
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: Colors.grey,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }
+
+                // ==================================================
+                // FILTER
+                // ==================================================
+
+                final List<QueryDocumentSnapshot<Map<String, dynamic>>> docs =
+                    snapshot.data?.docs.where(
+                          (doc) {
+                            final Map<String, dynamic> data = doc.data();
+
+                            final String semester =
+                                (data['semester'] ?? '').toString().trim();
+
+                            if (_filterSemester == 'All') {
+                              return true;
+                            }
+
+                            return semester == _filterSemester;
+                          },
+                        ).toList() ??
+                        [];
+
+                // ==================================================
+                // SORT NEWEST
+                // ==================================================
+
+                docs.sort(
+                  (
+                    a,
+                    b,
+                  ) {
+                    final dynamic aDate = a.data()['createdAt'];
+
+                    final dynamic bDate = b.data()['createdAt'];
+
+                    if (aDate is Timestamp && bDate is Timestamp) {
+                      return bDate.compareTo(
+                        aDate,
+                      );
+                    }
+
+                    return 0;
+                  },
+                );
+
+                // ==================================================
+                // EMPTY
+                // ==================================================
+
+                if (docs.isEmpty) {
+                  return Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(
+                        30,
+                      ),
+                      child: Column(
+                        children: [
+                          const Icon(
+                            Icons.campaign_outlined,
+                            size: 55,
+                            color: Colors.grey,
+                          ),
+                          const SizedBox(
+                            height: 10,
+                          ),
+                          Text(
+                            _filterSemester == 'All'
+                                ? 'No notices uploaded yet.'
+                                : 'No notices uploaded for $_filterSemester.',
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              color: Colors.grey,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }
+
+                // ==================================================
+                // LIST
+                // ==================================================
+
+                return Column(
+                  children: docs.map(
+                    (
+                      doc,
+                    ) {
+                      return _buildNoticeCard(
+                        doc,
+                      );
+                    },
+                  ).toList(),
+                );
+              },
+            ),
+
+            const SizedBox(
+              height: 20,
             ),
           ],
         ),

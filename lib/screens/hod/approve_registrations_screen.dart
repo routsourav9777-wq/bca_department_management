@@ -202,7 +202,7 @@ class _ApproveRegistrationsScreenState extends State<ApproveRegistrationsScreen>
                           CircleAvatar(
                             radius: 27,
                             backgroundColor:
-                                AppTheme.primaryBlue.withOpacity(0.1),
+                                AppTheme.primaryBlue.withValues(alpha: 0.1),
                             child: const Icon(
                               Icons.school,
                               color: AppTheme.primaryBlue,

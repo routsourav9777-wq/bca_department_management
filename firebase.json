@@ -1,1 +1,42 @@
-{"flutter":{"platforms":{"android":{"default":{"projectId":"bca-department-management-app","appId":"1:447716952637:android:798d0d2e6f0cd83301b854","fileOutput":"android/app/google-services.json"}},"dart":{"lib/firebase_options.dart":{"projectId":"bca-department-management-app","configurations":{"android":"1:447716952637:android:798d0d2e6f0cd83301b854","ios":"1:447716952637:ios:fd2f13f420c8a0f701b854","macos":"1:447716952637:ios:fd2f13f420c8a0f701b854","web":"1:447716952637:web:d9b1b18c24151c5a01b854","windows":"1:447716952637:web:2c0139abb19da13f01b854"}}}}}}
+{
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "bca-department-management-app",
+          "appId": "1:447716952637:android:798d0d2e6f0cd83301b854",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "bca-department-management-app",
+          "configurations": {
+            "android": "1:447716952637:android:798d0d2e6f0cd83301b854",
+            "ios": "1:447716952637:ios:fd2f13f420c8a0f701b854",
+            "macos": "1:447716952637:ios:fd2f13f420c8a0f701b854",
+            "web": "1:447716952637:web:d9b1b18c24151c5a01b854",
+            "windows": "1:447716952637:web:2c0139abb19da13f01b854"
+          }
+        }
+      }
+    }
+  },
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "default",
+      "disallowLegacyRuntimeConfig": true,
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log",
+        "*.local"
+      ],
+      "predeploy": [
+        "npm --prefix \"$RESOURCE_DIR\" run lint"
+      ]
+    }
+  ]
+}

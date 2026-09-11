@@ -1,7 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-
-import '../../core/theme/app_theme.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class ViewStudentsScreen extends StatefulWidget {
   const ViewStudentsScreen({super.key});
@@ -11,23 +10,13 @@ class ViewStudentsScreen extends StatefulWidget {
 }
 
 class _ViewStudentsScreenState extends State<ViewStudentsScreen> {
-  // ============================================================
-  // FIREBASE
-  // ============================================================
-
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  // ============================================================
-  // SELECTED SEMESTER
-  // ============================================================
+  String? _selectedSemester;
+  bool _isShifting = false;
 
-  String _selectedSem = 'Semester 1';
-
-  bool _isPromoting = false;
-
-  // ============================================================
-  // SEMESTERS
-  // ============================================================
+  // App primary color
+  static const Color primaryColor = Color(0xFF1565C0);
 
   final List<String> _semesters = [
     'Semester 1',
@@ -42,12 +31,10 @@ class _ViewStudentsScreenState extends State<ViewStudentsScreen> {
   // GET NEXT SEMESTER
   // ============================================================
 
-  String? _getNextSemester(
-    String semester,
-  ) {
+  String? _getNextSemester(String semester) {
     final int index = _semesters.indexOf(semester);
 
-    if (index == -1 || index >= _semesters.length - 1) {
+    if (index == -1 || index == _semesters.length - 1) {
       return null;
     }
 
@@ -55,197 +42,131 @@ class _ViewStudentsScreenState extends State<ViewStudentsScreen> {
   }
 
   // ============================================================
-  // SHIFT STUDENTS TO NEXT SEMESTER
+  // CALL STUDENT
   // ============================================================
 
-  Future<void> _shiftStudentsToNextSemester() async {
-    final String? nextSemester = _getNextSemester(_selectedSem);
+  Future<void> _callStudent(String phone) async {
+    String cleanPhone = phone.replaceAll(
+      RegExp(r'[^0-9+]'),
+      '',
+    );
 
-    // Semester 6 has no next semester
-    if (nextSemester == null) {
+    if (cleanPhone.isEmpty) {
       _showMessage(
-        'Semester 6 students cannot be shifted to another semester.',
-        Colors.orange,
+        'Phone number is not available.',
+        error: true,
       );
       return;
     }
 
-    // ==========================================================
-    // GET STUDENTS
-    // ==========================================================
+    // Indian 10 digit number
+    if (cleanPhone.length == 10 && !cleanPhone.startsWith('+')) {
+      cleanPhone = '+91$cleanPhone';
+    }
+
+    final Uri phoneUri = Uri(
+      scheme: 'tel',
+      path: cleanPhone,
+    );
 
     try {
-      final QuerySnapshot<Map<String, dynamic>> snapshot = await _firestore
-          .collection('students')
-          .where(
-            'semester',
-            isEqualTo: _selectedSem,
-          )
-          .get();
+      final bool launched = await launchUrl(
+        phoneUri,
+        mode: LaunchMode.externalApplication,
+      );
 
-      if (snapshot.docs.isEmpty) {
+      if (!launched) {
         _showMessage(
-          'No students found in $_selectedSem.',
-          Colors.orange,
-        );
-        return;
-      }
-
-      // ==========================================================
-      // CONFIRMATION
-      // ==========================================================
-
-      final bool? confirmed = await showDialog<bool>(
-        context: context,
-        builder: (dialogContext) {
-          return AlertDialog(
-            title: const Text(
-              'Shift Students?',
-            ),
-            content: Text(
-              'Are you sure you want to shift '
-              '${snapshot.docs.length} student(s) '
-              'from $_selectedSem to $nextSemester?',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () {
-                  Navigator.pop(
-                    dialogContext,
-                    false,
-                  );
-                },
-                child: const Text('Cancel'),
-              ),
-              ElevatedButton(
-                onPressed: () {
-                  Navigator.pop(
-                    dialogContext,
-                    true,
-                  );
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green,
-                ),
-                child: const Text('Shift'),
-              ),
-            ],
-          );
-        },
-      );
-
-      if (confirmed != true) {
-        return;
-      }
-
-      // ==========================================================
-      // START LOADING
-      // ==========================================================
-
-      setState(() {
-        _isPromoting = true;
-      });
-
-      // ==========================================================
-      // FIRESTORE BATCH
-      // ==========================================================
-
-      WriteBatch batch = _firestore.batch();
-
-      for (final doc in snapshot.docs) {
-        batch.update(
-          doc.reference,
-          {
-            'semester': nextSemester,
-            'previousSemester': _selectedSem,
-            'semesterUpdatedAt': FieldValue.serverTimestamp(),
-          },
+          'Unable to open phone dialer.',
+          error: true,
         );
       }
-
-      await batch.commit();
-
-      if (!mounted) return;
-
-      setState(() {
-        _isPromoting = false;
-      });
-
-      // ==========================================================
-      // SUCCESS
-      // ==========================================================
-
-      _showMessage(
-        '${snapshot.docs.length} student(s) shifted '
-        'from $_selectedSem to $nextSemester successfully.',
-        Colors.green,
-      );
     } catch (e) {
-      if (!mounted) return;
-
-      setState(() {
-        _isPromoting = false;
-      });
-
       _showMessage(
-        'Failed to shift students:\n$e',
-        Colors.red,
+        'Unable to make call.',
+        error: true,
       );
     }
   }
 
   // ============================================================
-  // SHIFT SPECIFIC STUDENT
+  // DELETE STUDENT
   // ============================================================
 
-  Future<void> _shiftSingleStudent(
-    DocumentSnapshot<Map<String, dynamic>> student,
+  Future<void> _deleteStudent(
+    QueryDocumentSnapshot studentDoc,
   ) async {
-    final String? nextSemester = _getNextSemester(_selectedSem);
+    final Map<String, dynamic> data = studentDoc.data() as Map<String, dynamic>;
 
-    if (nextSemester == null) {
-      _showMessage(
-        'Semester 6 has no next semester.',
-        Colors.orange,
-      );
-      return;
-    }
+    final String name = (data['name'] ?? 'Unknown Student').toString();
 
-    final Map<String, dynamic> data = student.data() ?? <String, dynamic>{};
+    final String rollNo = (data['rollNo'] ?? '').toString();
 
-    final String name = data['name']?.toString() ?? 'Student';
+    // ==========================================================
+    // CONFIRMATION DIALOG
+    // ==========================================================
 
     final bool? confirmed = await showDialog<bool>(
       context: context,
-      builder: (dialogContext) {
+      barrierDismissible: false,
+      builder: (context) {
         return AlertDialog(
-          title: const Text('Shift Student?'),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
+          ),
+          title: const Row(
+            children: [
+              Icon(
+                Icons.warning_amber_rounded,
+                color: Colors.red,
+              ),
+              SizedBox(width: 10),
+              Text(
+                'Delete Student',
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
           content: Text(
-            'Shift $name from '
-            '$_selectedSem to '
-            '$nextSemester?',
+            'Are you sure you want to delete this student?\n\n'
+            'Name: $name'
+            '${rollNo.isNotEmpty ? '\nRoll No: $rollNo' : ''}'
+            '\n\nThis action cannot be undone.',
+            style: const TextStyle(
+              height: 1.5,
+            ),
           ),
           actions: [
             TextButton(
               onPressed: () {
-                Navigator.pop(
-                  dialogContext,
-                  false,
-                );
+                Navigator.pop(context, false);
               },
-              child: const Text('Cancel'),
+              child: const Text(
+                'CANCEL',
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
             ),
             ElevatedButton(
               onPressed: () {
-                Navigator.pop(
-                  dialogContext,
-                  true,
-                );
+                Navigator.pop(context, true);
               },
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green,
+                backgroundColor: Colors.red.shade700,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
               ),
-              child: const Text('Shift'),
+              child: const Text(
+                'DELETE',
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
             ),
           ],
         );
@@ -256,42 +177,203 @@ class _ViewStudentsScreenState extends State<ViewStudentsScreen> {
       return;
     }
 
+    // ==========================================================
+    // DELETE FROM FIRESTORE
+    // ==========================================================
+
     try {
-      await student.reference.update({
-        'semester': nextSemester,
-        'previousSemester': _selectedSem,
-        'semesterUpdatedAt': FieldValue.serverTimestamp(),
-      });
+      await studentDoc.reference.delete();
 
       if (!mounted) return;
 
       _showMessage(
-        '$name shifted to $nextSemester.',
-        Colors.green,
+        '$name deleted successfully.',
       );
     } catch (e) {
       if (!mounted) return;
 
       _showMessage(
-        'Failed to shift student:\n$e',
-        Colors.red,
+        'Failed to delete student.',
+        error: true,
       );
     }
   }
 
   // ============================================================
-  // MESSAGE
+  // SHIFT ENTIRE SEMESTER
+  // ============================================================
+
+  Future<void> _shiftEntireSemester() async {
+    if (_selectedSemester == null) {
+      _showMessage(
+        'Please select a semester first.',
+        error: true,
+      );
+      return;
+    }
+
+    final String? nextSemester = _getNextSemester(_selectedSemester!);
+
+    if (nextSemester == null) {
+      _showMessage(
+        'Semester 6 cannot be shifted further.',
+        error: true,
+      );
+      return;
+    }
+
+    try {
+      // Get all students from selected semester
+      final QuerySnapshot snapshot = await _firestore
+          .collection('students')
+          .where(
+            'semester',
+            isEqualTo: _selectedSemester,
+          )
+          .get();
+
+      if (snapshot.docs.isEmpty) {
+        _showMessage(
+          'No students found in $_selectedSemester.',
+          error: true,
+        );
+        return;
+      }
+
+      // ========================================================
+      // CONFIRMATION
+      // ========================================================
+
+      final bool? confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) {
+          return AlertDialog(
+            title: const Text(
+              'Shift Entire Semester',
+            ),
+            content: Text(
+              'Are you sure you want to shift all '
+              '${snapshot.docs.length} students from '
+              '$_selectedSemester to $nextSemester?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(context, false);
+                },
+                child: const Text('CANCEL'),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.pop(context, true);
+                },
+                child: const Text('SHIFT ALL'),
+              ),
+            ],
+          );
+        },
+      );
+
+      if (confirmed != true) {
+        return;
+      }
+
+      setState(() {
+        _isShifting = true;
+      });
+
+      // Firestore batch maximum is 500 writes.
+      // Using 450 to stay safely below the limit.
+      const int batchLimit = 450;
+
+      for (int start = 0; start < snapshot.docs.length; start += batchLimit) {
+        final WriteBatch batch = _firestore.batch();
+
+        final int end = (start + batchLimit < snapshot.docs.length)
+            ? start + batchLimit
+            : snapshot.docs.length;
+
+        for (int i = start; i < end; i++) {
+          final DocumentSnapshot student = snapshot.docs[i];
+
+          batch.update(
+            student.reference,
+            {
+              'semester': nextSemester,
+              'previousSemester': _selectedSemester,
+              'semesterUpdatedAt': FieldValue.serverTimestamp(),
+            },
+          );
+        }
+
+        await batch.commit();
+      }
+
+      if (!mounted) return;
+
+      _showMessage(
+        'All students shifted to $nextSemester successfully.',
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      _showMessage(
+        'Failed to shift students.',
+        error: true,
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isShifting = false;
+        });
+      }
+    }
+  }
+
+  // ============================================================
+  // SHOW MESSAGE
   // ============================================================
 
   void _showMessage(
-    String message,
-    Color color,
-  ) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: color,
-      ),
+    String message, {
+    bool error = false,
+  }) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor: error ? Colors.red.shade700 : Colors.green.shade700,
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.all(16),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+      );
+  }
+
+  // ============================================================
+  // SHORT ROLL NUMBER
+  // ============================================================
+
+  String _getRollShort(String rollNo) {
+    if (rollNo.length <= 4) {
+      return rollNo;
+    }
+
+    if (rollNo.contains('-')) {
+      final List<String> parts = rollNo.split('-');
+
+      if (parts.isNotEmpty) {
+        return parts.last;
+      }
+    }
+
+    return rollNo.substring(
+      rollNo.length - 3,
     );
   }
 
@@ -301,368 +383,164 @@ class _ViewStudentsScreenState extends State<ViewStudentsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final String? nextSemester = _getNextSemester(_selectedSem);
+    final String? nextSemester =
+        _selectedSemester == null ? null : _getNextSemester(_selectedSemester!);
 
     return Scaffold(
-      // ==========================================================
-      // APP BAR
-      // ==========================================================
-
+      backgroundColor: const Color(0xFFF5F7FA),
       appBar: AppBar(
         title: const Text(
-          'BCA Student Directory',
+          'View Students',
+          style: TextStyle(
+            fontWeight: FontWeight.w600,
+          ),
         ),
+        centerTitle: true,
+        backgroundColor: primaryColor,
+        foregroundColor: Colors.white,
+        elevation: 0,
       ),
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            children: [
+              // ==================================================
+              // SEMESTER DROPDOWN
+              // ==================================================
 
-      // ==========================================================
-      // BODY
-      // ==========================================================
-
-      body: Column(
-        children: [
-          // ========================================================
-          // FILTER + PROMOTION SECTION
-          // ========================================================
-
-          Container(
-            padding: const EdgeInsets.all(16),
-            color: Colors.white,
-            child: Column(
-              children: [
-                // ==================================================
-                // SEMESTER DROPDOWN
-                // ==================================================
-
-                DropdownButtonFormField<String>(
-                  value: _selectedSem,
-                  decoration: const InputDecoration(
-                    labelText: 'Filter by Semester',
-                    prefixIcon: Icon(
-                      Icons.school_outlined,
-                    ),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 4,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: Colors.grey.shade300,
                   ),
-                  items: _semesters
-                      .map(
-                        (semester) => DropdownMenuItem<String>(
+                ),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    value: _selectedSemester,
+                    isExpanded: true,
+                    hint: const Text(
+                      'Select Semester',
+                    ),
+                    icon: const Icon(
+                      Icons.keyboard_arrow_down_rounded,
+                    ),
+                    items: _semesters.map(
+                      (String semester) {
+                        return DropdownMenuItem<String>(
                           value: semester,
                           child: Text(
                             semester,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w500,
+                            ),
                           ),
-                        ),
-                      )
-                      .toList(),
-                  onChanged: _isPromoting
-                      ? null
-                      : (value) {
-                          if (value != null) {
-                            setState(() {
-                              _selectedSem = value;
-                            });
-                          }
-                        },
+                        );
+                      },
+                    ).toList(),
+                    onChanged: (String? value) {
+                      setState(() {
+                        _selectedSemester = value;
+                      });
+                    },
+                  ),
                 ),
+              ),
 
-                const SizedBox(
-                  height: 12,
-                ),
+              // ==================================================
+              // SHIFT BUTTON
+              // ==================================================
 
-                // ==================================================
-                // SHIFT BUTTON
-                // ==================================================
-
+              if (_selectedSemester != null && nextSemester != null) ...[
+                const SizedBox(height: 12),
                 SizedBox(
                   width: double.infinity,
                   height: 48,
                   child: ElevatedButton.icon(
-                    onPressed: (_isPromoting || nextSemester == null)
-                        ? null
-                        : _shiftStudentsToNextSemester,
-                    icon: _isPromoting
+                    onPressed: _isShifting ? null : _shiftEntireSemester,
+                    icon: _isShifting
                         ? const SizedBox(
-                            width: 20,
-                            height: 20,
+                            width: 18,
+                            height: 18,
                             child: CircularProgressIndicator(
                               strokeWidth: 2,
                               color: Colors.white,
                             ),
                           )
                         : const Icon(
-                            Icons.arrow_forward,
+                            Icons.arrow_forward_rounded,
                           ),
                     label: Text(
-                      nextSemester == null
-                          ? 'Semester 6 Completed'
-                          : 'Shift $_selectedSem → $nextSemester',
+                      _isShifting
+                          ? 'Shifting Students...'
+                          : 'Shift $_selectedSemester → $nextSemester',
                     ),
-                  ),
-                ),
-
-                const SizedBox(
-                  height: 6,
-                ),
-
-                Text(
-                  nextSemester == null
-                      ? 'Semester 6 is the final semester.'
-                      : 'Use this button after the semester is completed.',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontSize: 11,
-                    color: Colors.grey,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: primaryColor,
+                      foregroundColor: Colors.white,
+                      disabledBackgroundColor: Colors.grey.shade400,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
                   ),
                 ),
               ],
+
+              const SizedBox(height: 16),
+
+              // ==================================================
+              // STUDENT AREA
+              // ==================================================
+
+              Expanded(
+                child: _selectedSemester == null
+                    ? _buildSelectSemesterMessage()
+                    : _buildStudentList(),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ============================================================
+  // SELECT SEMESTER MESSAGE
+  // ============================================================
+
+  Widget _buildSelectSemesterMessage() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.school_outlined,
+            size: 64,
+            color: Colors.grey.shade400,
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Select a semester',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              color: Colors.grey.shade700,
             ),
           ),
-
-          const Divider(
-            height: 1,
-          ),
-
-          // ========================================================
-          // FIREBASE STUDENT LIST
-          // ========================================================
-
-          Expanded(
-            child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-              stream: _firestore
-                  .collection('students')
-                  .where(
-                    'semester',
-                    isEqualTo: _selectedSem,
-                  )
-                  .snapshots(),
-              builder: (context, snapshot) {
-                // ================================================
-                // LOADING
-                // ================================================
-
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(
-                    child: CircularProgressIndicator(),
-                  );
-                }
-
-                // ================================================
-                // ERROR
-                // ================================================
-
-                if (snapshot.hasError) {
-                  return Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(
-                        20,
-                      ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(
-                            Icons.error_outline,
-                            color: Colors.red,
-                            size: 50,
-                          ),
-                          const SizedBox(
-                            height: 12,
-                          ),
-                          const Text(
-                            'Unable to load students',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(
-                            height: 6,
-                          ),
-                          Text(
-                            '${snapshot.error}',
-                            textAlign: TextAlign.center,
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                }
-
-                // ================================================
-                // NO STUDENTS
-                // ================================================
-
-                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(
-                          Icons.school_outlined,
-                          size: 60,
-                          color: Colors.grey,
-                        ),
-                        const SizedBox(
-                          height: 12,
-                        ),
-                        Text(
-                          'No students in $_selectedSem',
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(
-                          height: 5,
-                        ),
-                        const Text(
-                          'Students will appear here after registration approval.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: Colors.grey,
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                }
-
-                final students = snapshot.data!.docs;
-
-                // ================================================
-                // STUDENT LIST
-                // ================================================
-
-                return ListView.builder(
-                  padding: const EdgeInsets.all(
-                    16,
-                  ),
-                  itemCount: students.length,
-                  itemBuilder: (context, index) {
-                    final student = students[index];
-
-                    final Map<String, dynamic> data = student.data();
-
-                    final String rollNo = data['rollNo']?.toString() ??
-                        data['id']?.toString() ??
-                        'N/A';
-
-                    final String name = data['name']?.toString() ?? 'Student';
-
-                    final String email = data['email']?.toString() ?? '';
-
-                    final String phone = data['phone']?.toString() ?? '';
-
-                    return Card(
-                      margin: const EdgeInsets.only(
-                        bottom: 12,
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(
-                          14,
-                        ),
-                        child: Column(
-                          children: [
-                            // ==================================
-                            // STUDENT INFORMATION
-                            // ==================================
-
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                CircleAvatar(
-                                  backgroundColor:
-                                      AppTheme.primaryBlue.withValues(
-                                    alpha: 0.1,
-                                  ),
-                                  child: Text(
-                                    _getRollShort(
-                                      rollNo,
-                                    ),
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      color: AppTheme.primaryBlue,
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(
-                                  width: 12,
-                                ),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        '$rollNo • $name',
-                                        maxLines: 2,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 16,
-                                        ),
-                                      ),
-                                      const SizedBox(
-                                        height: 5,
-                                      ),
-                                      if (email.isNotEmpty)
-                                        Text(
-                                          '📧 $email',
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      if (phone.isNotEmpty)
-                                        Text(
-                                          '📞 $phone',
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      const SizedBox(
-                                        height: 3,
-                                      ),
-                                      Text(
-                                        'Current: $_selectedSem',
-                                        style: const TextStyle(
-                                          color: Colors.blueGrey,
-                                          fontSize: 12,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-
-                            const SizedBox(
-                              height: 12,
-                            ),
-
-                            // ==================================
-                            // INDIVIDUAL SHIFT BUTTON
-                            // ==================================
-
-                            if (nextSemester != null)
-                              SizedBox(
-                                width: double.infinity,
-                                child: OutlinedButton.icon(
-                                  onPressed: _isPromoting
-                                      ? null
-                                      : () => _shiftSingleStudent(
-                                            student,
-                                          ),
-                                  icon: const Icon(
-                                    Icons.arrow_forward,
-                                  ),
-                                  label: Text(
-                                    'Shift to $nextSemester',
-                                  ),
-                                  style: OutlinedButton.styleFrom(
-                                    foregroundColor: Colors.green.shade700,
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                );
-              },
+          const SizedBox(height: 6),
+          Text(
+            'Students will appear here',
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.grey.shade500,
             ),
           ),
         ],
@@ -671,24 +549,350 @@ class _ViewStudentsScreenState extends State<ViewStudentsScreen> {
   }
 
   // ============================================================
-  // SHORT ROLL NUMBER
+  // STUDENT LIST
   // ============================================================
 
-  String _getRollShort(
-    String rollNo,
+  Widget _buildStudentList() {
+    return StreamBuilder<QuerySnapshot>(
+      stream: _firestore
+          .collection('students')
+          .where(
+            'semester',
+            isEqualTo: _selectedSemester,
+          )
+          .snapshots(),
+      builder: (
+        BuildContext context,
+        AsyncSnapshot<QuerySnapshot> snapshot,
+      ) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(
+            child: CircularProgressIndicator(),
+          );
+        }
+
+        if (snapshot.hasError) {
+          return Center(
+            child: Text(
+              'Something went wrong.',
+              style: TextStyle(
+                color: Colors.red.shade700,
+              ),
+            ),
+          );
+        }
+
+        final List<QueryDocumentSnapshot> docs = snapshot.data?.docs ?? [];
+
+        if (docs.isEmpty) {
+          return _buildEmptyStudents();
+        }
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '${docs.length} Students',
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Expanded(
+              child: ListView.separated(
+                physics: const BouncingScrollPhysics(),
+                itemCount: docs.length,
+                separatorBuilder: (BuildContext context, int index) {
+                  return const SizedBox(height: 10);
+                },
+                itemBuilder: (BuildContext context, int index) {
+                  final Map<String, dynamic> data =
+                      docs[index].data() as Map<String, dynamic>;
+
+                  return _buildStudentCard(
+                    docs[index],
+                    data,
+                  );
+                },
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // ============================================================
+  // STUDENT CARD
+  // ============================================================
+
+  Widget _buildStudentCard(
+    QueryDocumentSnapshot studentDoc,
+    Map<String, dynamic> data,
   ) {
-    if (rollNo.length <= 4) {
-      return rollNo;
-    }
+    final String name = (data['name'] ?? 'Unknown Student').toString();
 
-    final parts = rollNo.split('-');
+    final String rollNo = (data['rollNo'] ?? '').toString();
 
-    if (parts.length > 1) {
-      return parts.last;
-    }
+    final String email = (data['email'] ?? '').toString();
 
-    return rollNo.substring(
-      rollNo.length - 3,
+    final String phone = (data['phone'] ?? '').toString();
+
+    final String semester = (data['semester'] ?? '').toString();
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: Colors.grey.shade200,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ======================================================
+          // STUDENT ICON
+          // ======================================================
+
+          Container(
+            height: 46,
+            width: 46,
+            decoration: BoxDecoration(
+              color: primaryColor.withValues(alpha: 0.10),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.person_outline_rounded,
+              color: primaryColor,
+              size: 25,
+            ),
+          ),
+
+          const SizedBox(width: 12),
+
+          // ======================================================
+          // STUDENT DETAILS
+          // ======================================================
+
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+
+                    // DELETE BUTTON
+                    const SizedBox(width: 8),
+
+                    InkWell(
+                      onTap: () {
+                        _deleteStudent(studentDoc);
+                      },
+                      borderRadius: BorderRadius.circular(20),
+                      child: Container(
+                        height: 36,
+                        width: 36,
+                        decoration: BoxDecoration(
+                          color: Colors.red.shade50,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          Icons.delete_outline_rounded,
+                          size: 19,
+                          color: Colors.red.shade700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+
+                if (rollNo.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    'Roll No: ${_getRollShort(rollNo)}',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.grey.shade600,
+                    ),
+                  ),
+                ],
+
+                const SizedBox(height: 6),
+
+                // =================================================
+                // PHONE + CALL ICON
+                // =================================================
+
+                if (phone.isNotEmpty)
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.phone_outlined,
+                        size: 16,
+                        color: Colors.grey.shade600,
+                      ),
+                      const SizedBox(width: 5),
+                      Expanded(
+                        child: Text(
+                          phone,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.grey.shade700,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+
+                      // CALL BUTTON
+                      InkWell(
+                        onTap: () {
+                          _callStudent(phone);
+                        },
+                        borderRadius: BorderRadius.circular(20),
+                        child: Container(
+                          height: 36,
+                          width: 36,
+                          decoration: BoxDecoration(
+                            color: Colors.green.shade50,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            Icons.call_rounded,
+                            size: 19,
+                            color: Colors.green.shade700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+
+                if (phone.isEmpty)
+                  Text(
+                    'Phone number not available',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.grey.shade500,
+                    ),
+                  ),
+
+                // =================================================
+                // EMAIL
+                // =================================================
+
+                if (email.isNotEmpty) ...[
+                  const SizedBox(height: 5),
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.email_outlined,
+                        size: 15,
+                        color: Colors.grey.shade500,
+                      ),
+                      const SizedBox(width: 5),
+                      Expanded(
+                        child: Text(
+                          email,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+
+                const SizedBox(height: 8),
+
+                // =================================================
+                // SEMESTER CHIP
+                // =================================================
+
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 9,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: primaryColor.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    semester,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: primaryColor,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ============================================================
+  // EMPTY STUDENT MESSAGE
+  // ============================================================
+
+  Widget _buildEmptyStudents() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.people_outline_rounded,
+            size: 60,
+            color: Colors.grey.shade400,
+          ),
+          const SizedBox(height: 14),
+          Text(
+            'No students found',
+            style: TextStyle(
+              fontSize: 17,
+              fontWeight: FontWeight.w600,
+              color: Colors.grey.shade700,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'No students are available in $_selectedSemester.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 13,
+              color: Colors.grey.shade500,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

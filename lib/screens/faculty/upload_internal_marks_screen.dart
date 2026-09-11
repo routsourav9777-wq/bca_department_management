@@ -60,7 +60,7 @@ class _UploadInternalMarksScreenState extends State<UploadInternalMarksScreen> {
               children: [
                 Expanded(
                   child: DropdownButtonFormField<String>(
-                    value: _selectedSem,
+                    initialValue: _selectedSem,
                     decoration: const InputDecoration(labelText: 'Semester'),
                     items: AppConstants.semesters
                         .map((s) => DropdownMenuItem(value: s, child: Text(s)))
@@ -73,7 +73,7 @@ class _UploadInternalMarksScreenState extends State<UploadInternalMarksScreen> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: DropdownButtonFormField<String>(
-                    value: _examType,
+                    initialValue: _examType,
                     decoration: const InputDecoration(labelText: 'Test / Exam'),
                     items: const [
                       DropdownMenuItem(

@@ -126,7 +126,7 @@ class _ManageSubjectsScreenState extends State<ManageSubjectsScreen> {
                         }
 
                         return DropdownButtonFormField<String>(
-                          value: selectedFacultyId,
+                          initialValue: selectedFacultyId,
                           isExpanded: true,
                           decoration: const InputDecoration(
                             labelText: 'Select Faculty',
