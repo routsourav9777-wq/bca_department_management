@@ -83,10 +83,8 @@ class AuthService {
   // Get User Profile
   Future<UserModel?> getUserProfile(String uid) async {
     try {
-      DocumentSnapshot doc = await _db
-          .collection(AppConstants.usersCollection)
-          .doc(uid)
-          .get();
+      DocumentSnapshot doc =
+          await _db.collection(AppConstants.usersCollection).doc(uid).get();
       if (doc.exists) {
         return UserModel.fromMap(doc.data() as Map<String, dynamic>, doc.id);
       }

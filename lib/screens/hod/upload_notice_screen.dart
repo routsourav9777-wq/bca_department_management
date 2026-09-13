@@ -98,6 +98,7 @@ class _UploadNoticeScreenState extends State<UploadNoticeScreen> {
 
       setState(() {
         _selectedCameraImage = file;
+
         _selectedImageName = image.name;
       });
 
@@ -147,6 +148,7 @@ class _UploadNoticeScreenState extends State<UploadNoticeScreen> {
 
       setState(() {
         _selectedPdfFile = file;
+
         _selectedPdfName = pickedFile.name;
       });
 
@@ -254,6 +256,42 @@ class _UploadNoticeScreenState extends State<UploadNoticeScreen> {
   }
 
   // ============================================================
+  // GET FCM TARGET
+  // ============================================================
+
+  String _getFcmTarget() {
+    if (_targetAudience == 'All Students & Faculty') {
+      return 'all';
+    }
+
+    if (_targetAudience == 'Faculty Members Only') {
+      return 'faculty';
+    }
+
+    if (_targetAudience == 'Students Only') {
+      final RegExp semesterRegex = RegExp(r'[1-6]');
+
+      final RegExpMatch? match = semesterRegex.firstMatch(
+        _selectedSemester,
+      );
+
+      if (match == null) {
+        throw Exception(
+          'Unable to determine selected semester.',
+        );
+      }
+
+      final String semesterNumber = match.group(0)!;
+
+      return 'semester_$semesterNumber';
+    }
+
+    throw Exception(
+      'Invalid notice audience.',
+    );
+  }
+
+  // ============================================================
   // PUBLISH NOTICE
   // ============================================================
 
@@ -282,8 +320,16 @@ class _UploadNoticeScreenState extends State<UploadNoticeScreen> {
       return;
     }
 
+    if (_targetAudience == 'Students Only' &&
+        _selectedSemester.trim().isEmpty) {
+      _showError(
+        'Please select a semester.',
+      );
+      return;
+    }
+
     // ==========================================================
-    // START UPLOAD
+    // START
     // ==========================================================
 
     setState(() {
@@ -292,7 +338,7 @@ class _UploadNoticeScreenState extends State<UploadNoticeScreen> {
 
     try {
       // ========================================================
-      // CREATE DOCUMENT
+      // CREATE NOTICE DOCUMENT
       // ========================================================
 
       final DocumentReference<Map<String, dynamic>> noticeRef =
@@ -325,25 +371,20 @@ class _UploadNoticeScreenState extends State<UploadNoticeScreen> {
       }
 
       // ========================================================
-      // IMPORTANT SEMESTER LOGIC
-      // ========================================================
-      //
-      // Students Only:
-      //     Save selected semester.
-      //
-      // All Students & Faculty:
-      //     Save "All".
-      //
-      // Faculty Members Only:
-      //     Save "All".
-      //
+      // SEMESTER
       // ========================================================
 
       final String semesterToSave =
           _targetAudience == 'Students Only' ? _selectedSemester : 'All';
 
       // ========================================================
-      // SAVE FIRESTORE
+      // FCM TARGET
+      // ========================================================
+
+      final String fcmTarget = _getFcmTarget();
+
+      // ========================================================
+      // SAVE NOTICE
       // ========================================================
 
       await noticeRef.set({
@@ -351,10 +392,7 @@ class _UploadNoticeScreenState extends State<UploadNoticeScreen> {
         'title': title,
         'content': content,
         'targetAudience': _targetAudience,
-
-        // Fixed semester logic
         'semester': semesterToSave,
-
         'department': 'BCA',
         'imageUrl': imageUrl,
         'imageName': _selectedImageName,
@@ -366,10 +404,109 @@ class _UploadNoticeScreenState extends State<UploadNoticeScreen> {
         'createdByRole': 'hod',
       });
 
+      // ========================================================
+      // CREATE FCM NOTIFICATION
+      //
+      // Existing Cloud Function:
+      //
+      // sendDepartmentPushNotificationV2
+      //
+      // listens to:
+      //
+      // notifications/{notificationId}
+      // ========================================================
+
+      final DocumentReference<Map<String, dynamic>> notificationRef =
+          _firestore.collection('notifications').doc();
+
+      final String notificationId = notificationRef.id;
+
+      await notificationRef.set({
+        // ======================================================
+        // NOTIFICATION ID
+        // ======================================================
+
+        'notificationId': notificationId,
+
+        // ======================================================
+        // FCM CONTENT
+        // ======================================================
+
+        'title': title,
+
+        'body': content,
+
+        // ======================================================
+        // FCM TARGET
+        // ======================================================
+
+        'target': fcmTarget,
+
+        'targetLabel': _targetAudience,
+
+        // ======================================================
+        // NOTICE LINK
+        // ======================================================
+
+        'noticeId': noticeId,
+
+        'noticeTitle': title,
+
+        'noticeSemester': semesterToSave,
+
+        // ======================================================
+        // ATTACHMENTS
+        // ======================================================
+
+        'hasImage': imageUrl != null && imageUrl.trim().isNotEmpty,
+
+        'hasPdf': pdfUrl != null && pdfUrl.trim().isNotEmpty,
+
+        // ======================================================
+        // DEPARTMENT
+        // ======================================================
+
+        'department': 'BCA',
+
+        // ======================================================
+        // CREATOR
+        // ======================================================
+
+        'createdBy': 'department',
+
+        'createdByRole': 'hod',
+
+        // ======================================================
+        // TYPE
+        // ======================================================
+
+        'type': 'push',
+
+        // ======================================================
+        // STATUS
+        //
+        // Cloud Function:
+        //
+        // pending
+        //     ↓
+        // sending
+        //     ↓
+        // sent
+        // ======================================================
+
+        'status': 'pending',
+
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+
+      // ========================================================
+      // SUCCESS
+      // ========================================================
+
       if (!mounted) return;
 
       _showMessage(
-        'Department Notice Published Successfully!',
+        'Notice Published & Notification Sent Successfully!',
         Colors.green,
       );
 
@@ -383,9 +520,11 @@ class _UploadNoticeScreenState extends State<UploadNoticeScreen> {
 
       setState(() {
         _selectedCameraImage = null;
+
         _selectedImageName = null;
 
         _selectedPdfFile = null;
+
         _selectedPdfName = null;
 
         _targetAudience = 'All Students & Faculty';
@@ -394,8 +533,6 @@ class _UploadNoticeScreenState extends State<UploadNoticeScreen> {
 
         _isUploading = false;
       });
-
-      // StreamBuilder automatically updates.
     } catch (e) {
       if (!mounted) return;
 
@@ -438,9 +575,10 @@ class _UploadNoticeScreenState extends State<UploadNoticeScreen> {
             'Delete Notice?',
           ),
           content: Text(
-            'Are you sure you want to delete "$title"?\n\n'
-            'The notice and its attached PDF/image '
-            'will also be deleted.',
+            'Are you sure you want to delete '
+            '"$title"?\n\n'
+            'The notice and its attached '
+            'PDF/image will also be deleted.',
           ),
           actions: [
             TextButton(
@@ -541,7 +679,7 @@ class _UploadNoticeScreenState extends State<UploadNoticeScreen> {
       }
 
       // ========================================================
-      // DELETE FIRESTORE DOCUMENT
+      // DELETE FIRESTORE NOTICE
       // ========================================================
 
       await _firestore.collection('notices').doc(doc.id).delete();
@@ -1154,14 +1292,16 @@ class _UploadNoticeScreenState extends State<UploadNoticeScreen> {
       context,
     ).showSnackBar(
       SnackBar(
-        content: Text(
-          message,
-        ),
+        content: Text(message),
         backgroundColor: color,
         behavior: SnackBarBehavior.floating,
       ),
     );
   }
+
+  // ============================================================
+  // ERROR
+  // ============================================================
 
   void _showError(
     String message,
@@ -1308,9 +1448,6 @@ class _UploadNoticeScreenState extends State<UploadNoticeScreen> {
 
                     // ==================================================
                     // SEMESTER
-                    //
-                    // IMPORTANT:
-                    // Only Students Only will show semester.
                     // ==================================================
 
                     if (_targetAudience == 'Students Only') ...[
@@ -1489,7 +1626,7 @@ class _UploadNoticeScreenState extends State<UploadNoticeScreen> {
                     ),
 
                     // ==================================================
-                    // PUBLISH BUTTON
+                    // PUBLISH
                     // ==================================================
 
                     SizedBox(
@@ -1691,7 +1828,9 @@ class _UploadNoticeScreenState extends State<UploadNoticeScreen> {
 
                 final List<QueryDocumentSnapshot<Map<String, dynamic>>> docs =
                     snapshot.data?.docs.where(
-                          (doc) {
+                          (
+                            doc,
+                          ) {
                             final Map<String, dynamic> data = doc.data();
 
                             final String semester =

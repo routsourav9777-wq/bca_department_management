@@ -2,6 +2,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../services/update.dart';
+
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
 
@@ -71,26 +73,39 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 icon: Icons.info_outline,
                 iconColor: Colors.indigo,
                 title: 'About',
-                subtitle: 'BCA Department Management App',
+                subtitle: 'SAC BCA Department Management App',
                 onTap: _showAboutDialog,
               ),
               _buildSettingTile(
                 icon: Icons.system_update_outlined,
                 iconColor: Colors.purple,
                 title: 'App Update',
-                subtitle: 'Check app version',
-                onTap: _showAppUpdate,
+                subtitle: 'Check for the latest SAC BCA APK',
+                onTap: _isLoading ? null : _showAppUpdate,
               ),
               const SizedBox(height: 24),
               Center(
-                child: Text(
-                  'BCA Department Management App\nVersion 1.0.0',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: Colors.grey.shade600,
-                    fontSize: 13,
-                    height: 1.5,
-                  ),
+                child: Column(
+                  children: [
+                    const Text(
+                      'SAC BCA',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'BCA Department Management App\nVersion 1.0.0',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.grey.shade600,
+                        fontSize: 13,
+                        height: 1.5,
+                      ),
+                    ),
+                  ],
                 ),
               ),
               const SizedBox(height: 30),
@@ -164,7 +179,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text(
-                    'BCA Department',
+                    'SAC BCA',
                     style: TextStyle(
                       fontSize: 17,
                       fontWeight: FontWeight.bold,
@@ -327,7 +342,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
         );
       }
 
-      await freshUser.reauthenticateWithCredential(credential).timeout(
+      await freshUser
+          .reauthenticateWithCredential(
+            credential,
+          )
+          .timeout(
             const Duration(seconds: 15),
           );
 
@@ -340,7 +359,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
         );
       }
 
-      await authenticatedUser.updatePassword(data.newPassword).timeout(
+      await authenticatedUser
+          .updatePassword(
+            data.newPassword,
+          )
+          .timeout(
             const Duration(seconds: 15),
           );
 
@@ -430,15 +453,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
 
     try {
-      // ----------------------------------------------------------
-      // Set email language
-      // ----------------------------------------------------------
-
       await _auth.setLanguageCode('en');
-
-      // ----------------------------------------------------------
-      // Get latest Firebase user
-      // ----------------------------------------------------------
 
       User? freshUser = _auth.currentUser;
 
@@ -449,22 +464,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
         );
       }
 
-      // ----------------------------------------------------------
-      // Re-authenticate using CURRENT email + CURRENT password
-      // ----------------------------------------------------------
-
       final AuthCredential credential = EmailAuthProvider.credential(
         email: currentEmail,
         password: data.currentPassword,
       );
 
-      await freshUser.reauthenticateWithCredential(credential).timeout(
+      await freshUser
+          .reauthenticateWithCredential(
+            credential,
+          )
+          .timeout(
             const Duration(seconds: 15),
           );
-
-      // ----------------------------------------------------------
-      // Get user again after re-authentication
-      // ----------------------------------------------------------
 
       freshUser = _auth.currentUser;
 
@@ -475,17 +486,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
         );
       }
 
-      // ----------------------------------------------------------
-      // IMPORTANT:
-      //
-      // verifyBeforeUpdateEmail sends a verification email
-      // to the NEW EMAIL ADDRESS.
-      //
-      // The Firebase account email is changed only after the
-      // verification link is completed.
-      // ----------------------------------------------------------
-
-      await freshUser.verifyBeforeUpdateEmail(newEmail).timeout(
+      await freshUser
+          .verifyBeforeUpdateEmail(
+            newEmail,
+          )
+          .timeout(
             const Duration(seconds: 30),
           );
 
@@ -493,7 +498,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
         return;
       }
 
-      _showEmailVerificationSuccess(newEmail);
+      _showEmailVerificationSuccess(
+        newEmail,
+      );
     } on FirebaseAuthException catch (e) {
       if (!mounted) {
         return;
@@ -531,10 +538,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   // ============================================================
-  // EMAIL SUCCESS DIALOG
+  // EMAIL VERIFICATION SUCCESS
   // ============================================================
 
-  void _showEmailVerificationSuccess(String newEmail) {
+  void _showEmailVerificationSuccess(
+    String newEmail,
+  ) {
     showDialog<void>(
       context: context,
       barrierDismissible: false,
@@ -585,7 +594,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
           actions: [
             TextButton(
               onPressed: () {
-                Navigator.pop(dialogContext);
+                Navigator.pop(
+                  dialogContext,
+                );
               },
               child: const Text('OK'),
             ),
@@ -596,7 +607,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   // ============================================================
-  // FIREBASE ERROR HANDLER
+  // FIREBASE ERROR
   // ============================================================
 
   void _showFirebaseError(
@@ -612,9 +623,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     switch (e.code) {
       case 'invalid-credential':
       case 'wrong-password':
-        message = isEmailChange
-            ? 'Current password is incorrect.'
-            : 'Current password is incorrect.';
+        message = 'Current password is incorrect.';
         break;
 
       case 'invalid-email':
@@ -664,11 +673,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
         message = 'Password is too weak. Please use a stronger password.';
         break;
 
-      case 'timeout':
-        message =
-            'Firebase request timed out. Please check your internet connection and try again.';
-        break;
-
       default:
         message = e.message?.trim().isNotEmpty == true
             ? e.message!.trim()
@@ -687,12 +691,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _openWhatsApp({
     String message =
-        'Hello, I need help regarding the BCA Department Management App.',
+        'Hello, I need help regarding the SAC BCA Department Management App.',
   }) async {
     const String phoneNumber = '919861333487';
 
     final Uri whatsappUrl = Uri.parse(
-      'https://wa.me/$phoneNumber?text=${Uri.encodeComponent(message)}',
+      'https://wa.me/$phoneNumber'
+      '?text=${Uri.encodeComponent(message)}',
     );
 
     try {
@@ -730,7 +735,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             borderRadius: BorderRadius.circular(18),
           ),
           title: const Text(
-            'About App',
+            'About SAC BCA',
             style: TextStyle(
               fontWeight: FontWeight.bold,
             ),
@@ -740,13 +745,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'BCA Department Management App',
+                'SAC BCA',
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
-                  fontSize: 16,
+                  fontSize: 18,
                 ),
               ),
-              SizedBox(height: 10),
+              SizedBox(height: 4),
+              Text(
+                'BCA Department Management App',
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 14,
+                ),
+              ),
+              SizedBox(height: 12),
               Text(
                 'Designed for managing BCA Department '
                 'academic activities, attendance, notices, '
@@ -767,7 +780,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
           actions: [
             TextButton(
               onPressed: () {
-                Navigator.pop(dialogContext);
+                Navigator.pop(
+                  dialogContext,
+                );
               },
               child: const Text('Close'),
             ),
@@ -778,49 +793,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   // ============================================================
-  // APP UPDATE
+  // REAL GITHUB APK UPDATE
   // ============================================================
 
-  void _showAppUpdate() {
-    showDialog<void>(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(18),
-          ),
-          title: const Row(
-            children: [
-              Icon(
-                Icons.system_update_outlined,
-                color: Colors.purple,
-              ),
-              SizedBox(width: 10),
-              Text(
-                'App Update',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
-          ),
-          content: const Text(
-            'You are currently using version 1.0.0.\n\n'
-            'No update information is available right now.',
-            style: TextStyle(
-              height: 1.5,
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.pop(dialogContext);
-              },
-              child: const Text('OK'),
-            ),
-          ],
-        );
-      },
+  Future<void> _showAppUpdate() async {
+    await AppUpdateService.instance.checkForUpdate(
+      context,
     );
   }
 
@@ -840,7 +818,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ..hideCurrentSnackBar()
       ..showSnackBar(
         SnackBar(
-          content: Text(message),
+          content: Text(
+            message,
+          ),
           backgroundColor: error ? Colors.red.shade700 : Colors.green.shade700,
           behavior: SnackBarBehavior.floating,
           duration: const Duration(seconds: 4),
@@ -892,7 +872,9 @@ class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
 
   late final TextEditingController _currentPasswordController;
+
   late final TextEditingController _newPasswordController;
+
   late final TextEditingController _confirmPasswordController;
 
   bool _hideCurrentPassword = true;
@@ -978,6 +960,7 @@ class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
                   if (value == null || value.isEmpty) {
                     return 'Enter current password';
                   }
+
                   return null;
                 },
               ),
@@ -1089,6 +1072,7 @@ class _ChangeEmailDialogState extends State<_ChangeEmailDialog> {
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
 
   late final TextEditingController _newEmailController;
+
   late final TextEditingController _currentPasswordController;
 
   bool _hidePassword = true;
@@ -1180,7 +1164,9 @@ class _ChangeEmailDialogState extends State<_ChangeEmailDialog> {
                     r'^[^@\s]+@[^@\s]+\.[^@\s]+$',
                   );
 
-                  if (!emailRegex.hasMatch(email)) {
+                  if (!emailRegex.hasMatch(
+                    email,
+                  )) {
                     return 'Enter a valid email address';
                   }
 

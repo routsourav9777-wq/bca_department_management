@@ -7,8 +7,10 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 import '../firebase_options.dart';
 
-/// Firebase Messaging background handler.
-/// Must be a top-level function.
+/// ============================================================
+/// FIREBASE MESSAGING BACKGROUND HANDLER
+/// ============================================================
+
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(
   RemoteMessage message,
@@ -18,46 +20,57 @@ Future<void> firebaseMessagingBackgroundHandler(
       options: DefaultFirebaseOptions.currentPlatform,
     );
 
-    debugPrint('🔔 Background notification received');
+    debugPrint('==========================================');
+    debugPrint('🔔 BACKGROUND FCM NOTIFICATION RECEIVED');
     debugPrint('Message ID: ${message.messageId}');
     debugPrint('Title: ${message.notification?.title}');
     debugPrint('Body: ${message.notification?.body}');
     debugPrint('Data: ${message.data}');
-  } catch (e) {
-    debugPrint(
-      '❌ Background notification error: ${e.toString()}',
-    );
+    debugPrint('==========================================');
+  } catch (e, stackTrace) {
+    debugPrint('❌ Background notification error: $e');
+    debugPrint(stackTrace.toString());
   }
 }
+
+/// ============================================================
+/// NOTIFICATION SERVICE
+/// ============================================================
 
 class NotificationService {
   NotificationService._();
 
-  static final NotificationService instance = NotificationService._();
+  static final NotificationService instance =
+      NotificationService._();
 
-  final FirebaseMessaging _fcm = FirebaseMessaging.instance;
+  final FirebaseMessaging _fcm =
+      FirebaseMessaging.instance;
 
-  final FlutterLocalNotificationsPlugin _localNotifications =
+  final FlutterLocalNotificationsPlugin
+      _localNotifications =
       FlutterLocalNotificationsPlugin();
 
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseFirestore _firestore =
+      FirebaseFirestore.instance;
 
   bool _initialized = false;
 
-  // ===============================================================
-  // ANDROID NOTIFICATION CHANNEL
-  // ===============================================================
+  /// ==========================================================
+  /// ANDROID NOTIFICATION CHANNEL
+  /// ==========================================================
 
-  static const String _channelId = 'bca_department_high';
+  static const String _channelId =
+      'bca_department_high';
 
-  static const String _channelName = 'BCA Department Notifications';
+  static const String _channelName =
+      'BCA Department Notifications';
 
   static const String _channelDescription =
       'Important notifications from BCA Department';
 
-  // ===============================================================
-  // INITIALIZE NOTIFICATION SERVICE
-  // ===============================================================
+  /// ==========================================================
+  /// INITIALIZE
+  /// ==========================================================
 
   Future<void> initialize() async {
     if (_initialized) {
@@ -68,6 +81,7 @@ class NotificationService {
     }
 
     try {
+      debugPrint('');
       debugPrint(
         '==========================================',
       );
@@ -78,11 +92,12 @@ class NotificationService {
         '==========================================',
       );
 
-      // -----------------------------------------------------------
-      // 1. REQUEST FCM NOTIFICATION PERMISSION
-      // -----------------------------------------------------------
+      /// ------------------------------------------------------
+      /// REQUEST FCM PERMISSION
+      /// ------------------------------------------------------
 
-      final NotificationSettings settings = await _fcm.requestPermission(
+      final NotificationSettings settings =
+          await _fcm.requestPermission(
         alert: true,
         badge: true,
         sound: true,
@@ -94,44 +109,62 @@ class NotificationService {
         '${settings.authorizationStatus}',
       );
 
-      // -----------------------------------------------------------
-      // 2. INITIALIZE LOCAL NOTIFICATIONS
-      // -----------------------------------------------------------
+      /// ------------------------------------------------------
+      /// ANDROID INITIALIZATION
+      /// ------------------------------------------------------
 
-      const AndroidInitializationSettings androidSettings =
+      const AndroidInitializationSettings
+          androidSettings =
           AndroidInitializationSettings(
         'notification_icon',
       );
 
-      const DarwinInitializationSettings iosSettings =
+      /// ------------------------------------------------------
+      /// IOS INITIALIZATION
+      /// ------------------------------------------------------
+
+      const DarwinInitializationSettings
+          iosSettings =
           DarwinInitializationSettings(
         requestAlertPermission: true,
         requestBadgePermission: true,
         requestSoundPermission: true,
       );
 
-      const InitializationSettings initializationSettings =
+      /// ------------------------------------------------------
+      /// INITIALIZATION SETTINGS
+      /// ------------------------------------------------------
+
+      const InitializationSettings
+          initializationSettings =
           InitializationSettings(
         android: androidSettings,
         iOS: iosSettings,
       );
 
+      /// ------------------------------------------------------
+      /// INITIALIZE LOCAL NOTIFICATIONS
+      /// ------------------------------------------------------
+
       await _localNotifications.initialize(
         settings: initializationSettings,
-        onDidReceiveNotificationResponse: _onLocalNotificationTap,
+        onDidReceiveNotificationResponse:
+            _onLocalNotificationTap,
       );
 
       debugPrint(
         '✅ Local notifications initialized.',
       );
 
-      // -----------------------------------------------------------
-      // 3. CREATE ANDROID NOTIFICATION CHANNEL
-      // -----------------------------------------------------------
+      /// ------------------------------------------------------
+      /// ANDROID NOTIFICATION CHANNEL
+      /// ------------------------------------------------------
 
-      final AndroidFlutterLocalNotificationsPlugin? androidPlugin =
-          _localNotifications.resolvePlatformSpecificImplementation<
-              AndroidFlutterLocalNotificationsPlugin>();
+      final AndroidFlutterLocalNotificationsPlugin?
+          androidPlugin =
+          _localNotifications
+              .resolvePlatformSpecificImplementation<
+                  AndroidFlutterLocalNotificationsPlugin>();
 
       if (androidPlugin != null) {
         await androidPlugin.createNotificationChannel(
@@ -149,20 +182,22 @@ class NotificationService {
           '✅ Android notification channel created.',
         );
 
-        // Android 13+
-        await androidPlugin.requestNotificationsPermission();
+        /// Android 13+
+        await androidPlugin
+            .requestNotificationsPermission();
 
         debugPrint(
           '✅ Android notification permission requested.',
         );
       }
 
-      // -----------------------------------------------------------
-      // 4. FOREGROUND MESSAGE LISTENER
-      // -----------------------------------------------------------
+      /// ------------------------------------------------------
+      /// FOREGROUND MESSAGE
+      /// ------------------------------------------------------
 
       FirebaseMessaging.onMessage.listen(
         (RemoteMessage message) async {
+          debugPrint('');
           debugPrint(
             '==========================================',
           );
@@ -192,14 +227,14 @@ class NotificationService {
         onError: (Object error) {
           debugPrint(
             '❌ Foreground notification listener error: '
-            '${error.toString()}',
+            '$error',
           );
         },
       );
 
-      // -----------------------------------------------------------
-      // 5. NOTIFICATION OPENED FROM BACKGROUND
-      // -----------------------------------------------------------
+      /// ------------------------------------------------------
+      /// BACKGROUND NOTIFICATION TAP
+      /// ------------------------------------------------------
 
       FirebaseMessaging.onMessageOpenedApp.listen(
         (RemoteMessage message) {
@@ -218,16 +253,17 @@ class NotificationService {
         onError: (Object error) {
           debugPrint(
             '❌ Notification opened listener error: '
-            '${error.toString()}',
+            '$error',
           );
         },
       );
 
-      // -----------------------------------------------------------
-      // 6. NOTIFICATION OPENED FROM TERMINATED STATE
-      // -----------------------------------------------------------
+      /// ------------------------------------------------------
+      /// TERMINATED APP NOTIFICATION TAP
+      /// ------------------------------------------------------
 
-      final RemoteMessage? initialMessage = await _fcm.getInitialMessage();
+      final RemoteMessage? initialMessage =
+          await _fcm.getInitialMessage();
 
       if (initialMessage != null) {
         debugPrint(
@@ -243,19 +279,22 @@ class NotificationService {
         );
       }
 
-      // -----------------------------------------------------------
-      // 7. GET FCM TOKEN
-      // -----------------------------------------------------------
+      /// ------------------------------------------------------
+      /// GET FCM TOKEN
+      /// ------------------------------------------------------
 
       try {
-        final String? token = await _fcm.getToken();
+        final String? token =
+            await _fcm.getToken();
 
-        if (token != null && token.isNotEmpty) {
+        if (token != null &&
+            token.isNotEmpty) {
+          debugPrint('');
           debugPrint(
             '==========================================',
           );
           debugPrint(
-            '🔥 FCM TOKEN:',
+            '🔥 FCM TOKEN',
           );
           debugPrint(token);
           debugPrint(
@@ -268,36 +307,52 @@ class NotificationService {
         }
       } catch (e) {
         debugPrint(
-          '❌ Unable to get FCM token: '
-          '${e.toString()}',
+          '❌ Unable to get FCM token: $e',
         );
       }
 
-      // -----------------------------------------------------------
-      // 8. FCM TOKEN REFRESH LISTENER
-      // -----------------------------------------------------------
+      /// ------------------------------------------------------
+      /// TOKEN REFRESH
+      /// ------------------------------------------------------
 
       _fcm.onTokenRefresh.listen(
         (String newToken) async {
+          debugPrint('');
           debugPrint(
-            '🔄 FCM token refreshed:',
+            '==========================================',
+          );
+          debugPrint(
+            '🔄 FCM TOKEN REFRESHED',
           );
           debugPrint(newToken);
+          debugPrint(
+            '==========================================',
+          );
 
           await _saveTokenForCurrentUser(
             newToken,
           );
+
+          /// Re-register topics after token refresh.
+          final User? user =
+              FirebaseAuth.instance.currentUser;
+
+          if (user != null) {
+            await _subscribeUserToRoleTopics(
+              user,
+            );
+          }
         },
         onError: (Object error) {
           debugPrint(
-            '❌ FCM token refresh error: '
-            '${error.toString()}',
+            '❌ FCM token refresh error: $error',
           );
         },
       );
 
       _initialized = true;
 
+      debugPrint('');
       debugPrint(
         '==========================================',
       );
@@ -308,33 +363,31 @@ class NotificationService {
         '==========================================',
       );
     } catch (e, stackTrace) {
+      debugPrint('');
       debugPrint(
         '==========================================',
       );
       debugPrint(
         '❌ NOTIFICATION SERVICE INITIALIZATION ERROR',
       );
-      debugPrint(
-        e.toString(),
-      );
+      debugPrint(e.toString());
       debugPrint(
         stackTrace.toString(),
       );
       debugPrint(
         '==========================================',
       );
-
-      // Notification failure should not stop app login.
     }
   }
 
-  // ===============================================================
-  // REGISTER LOGGED-IN USER
-  // ===============================================================
+  /// ==========================================================
+  /// REGISTER LOGGED-IN USER
+  /// ==========================================================
 
   Future<void> registerLoggedInUser() async {
     try {
-      final User? user = FirebaseAuth.instance.currentUser;
+      final User? user =
+          FirebaseAuth.instance.currentUser;
 
       if (user == null) {
         debugPrint(
@@ -346,6 +399,7 @@ class NotificationService {
         return;
       }
 
+      debugPrint('');
       debugPrint(
         '==========================================',
       );
@@ -362,45 +416,49 @@ class NotificationService {
         '==========================================',
       );
 
-      // Make sure notification service is initialized.
+      /// Initialize if required.
       if (!_initialized) {
         await initialize();
       }
 
-      // -----------------------------------------------------------
-      // GET FCM TOKEN
-      // -----------------------------------------------------------
+      /// ------------------------------------------------------
+      /// GET TOKEN
+      /// ------------------------------------------------------
 
-      final String? token = await _fcm.getToken();
+      final String? token =
+          await _fcm.getToken();
 
-      if (token == null || token.isEmpty) {
+      if (token == null ||
+          token.isEmpty) {
         debugPrint(
           '❌ FCM token is null/empty.',
         );
         return;
       }
 
+      debugPrint('');
       debugPrint(
         '🔥 USER FCM TOKEN:',
       );
       debugPrint(token);
 
-      // -----------------------------------------------------------
-      // SAVE TOKEN
-      // -----------------------------------------------------------
+      /// ------------------------------------------------------
+      /// SAVE TOKEN
+      /// ------------------------------------------------------
 
       await _saveTokenForCurrentUser(
         token,
       );
 
-      // -----------------------------------------------------------
-      // SUBSCRIBE USER TO ROLE TOPICS
-      // -----------------------------------------------------------
+      /// ------------------------------------------------------
+      /// SUBSCRIBE ROLE TOPICS
+      /// ------------------------------------------------------
 
       await _subscribeUserToRoleTopics(
         user,
       );
 
+      debugPrint('');
       debugPrint(
         '==========================================',
       );
@@ -411,15 +469,14 @@ class NotificationService {
         '==========================================',
       );
     } catch (e, stackTrace) {
+      debugPrint('');
       debugPrint(
         '==========================================',
       );
       debugPrint(
         '❌ NOTIFICATION REGISTRATION ERROR',
       );
-      debugPrint(
-        e.toString(),
-      );
+      debugPrint(e.toString());
       debugPrint(
         stackTrace.toString(),
       );
@@ -429,15 +486,16 @@ class NotificationService {
     }
   }
 
-  // ===============================================================
-  // SAVE FCM TOKEN TO FIRESTORE
-  // ===============================================================
+  /// ==========================================================
+  /// SAVE TOKEN
+  /// ==========================================================
 
   Future<void> _saveTokenForCurrentUser(
     String token,
   ) async {
     try {
-      final User? user = FirebaseAuth.instance.currentUser;
+      final User? user =
+          FirebaseAuth.instance.currentUser;
 
       if (user == null) {
         debugPrint(
@@ -446,13 +504,18 @@ class NotificationService {
         return;
       }
 
-      await _firestore.collection('fcm_tokens').doc(user.uid).set(
+      await _firestore
+          .collection('fcm_tokens')
+          .doc(user.uid)
+          .set(
         {
           'uid': user.uid,
           'email': user.email,
           'token': token,
-          'platform': defaultTargetPlatform.name,
-          'updatedAt': FieldValue.serverTimestamp(),
+          'platform':
+              defaultTargetPlatform.name,
+          'updatedAt':
+              FieldValue.serverTimestamp(),
         },
         SetOptions(merge: true),
       );
@@ -462,41 +525,55 @@ class NotificationService {
       );
     } catch (e) {
       debugPrint(
-        '❌ Error saving FCM token: '
-        '${e.toString()}',
+        '❌ Error saving FCM token: $e',
       );
     }
   }
 
-  // ===============================================================
-  // SUBSCRIBE USER TO ROLE TOPICS
-  // ===============================================================
+  /// ==========================================================
+  /// SUBSCRIBE USER TO ROLE TOPICS
+  /// ==========================================================
 
   Future<void> _subscribeUserToRoleTopics(
     User user,
   ) async {
     try {
+      debugPrint('');
       debugPrint(
-        '🔎 Checking user role...',
+        '==========================================',
+      );
+      debugPrint(
+        '🔎 CHECKING USER ROLE',
+      );
+      debugPrint(
+        '==========================================',
       );
 
-      // ===========================================================
-      // HOD
-      // ===========================================================
+      /// ======================================================
+      /// HOD
+      /// ======================================================
 
-      final QuerySnapshot<Map<String, dynamic>> hodSnapshot = await _firestore
-          .collection('hod')
-          .where(
-            'email',
-            isEqualTo: user.email,
-          )
-          .limit(1)
-          .get();
+      final QuerySnapshot<
+              Map<String, dynamic>>
+          hodSnapshot =
+          await _firestore
+              .collection('hod')
+              .where(
+                'email',
+                isEqualTo: user.email,
+              )
+              .limit(1)
+              .get();
 
       if (hodSnapshot.docs.isNotEmpty) {
-        final Map<String, dynamic> data = hodSnapshot.docs.first.data();
+        final Map<String, dynamic> data =
+            hodSnapshot.docs.first.data();
 
-        final String status = data['status']?.toString().toLowerCase() ?? '';
+        final String status =
+            data['status']
+                    ?.toString()
+                    .toLowerCase() ??
+                '';
 
         debugPrint(
           'HOD status: $status',
@@ -512,30 +589,24 @@ class NotificationService {
           );
 
           debugPrint(
-            '==========================================',
+            '✅ HOD subscribed to: hod',
           );
+
           debugPrint(
-            '✅ HOD TOPIC SUBSCRIBED',
-          );
-          debugPrint(
-            'Topic: hod',
-          );
-          debugPrint(
-            'Topic: all_staff',
-          );
-          debugPrint(
-            '==========================================',
+            '✅ HOD subscribed to: all_staff',
           );
 
           return;
         }
       }
 
-      // ===========================================================
-      // FACULTY
-      // ===========================================================
+      /// ======================================================
+      /// FACULTY
+      /// ======================================================
 
-      final QuerySnapshot<Map<String, dynamic>> facultySnapshot =
+      final QuerySnapshot<
+              Map<String, dynamic>>
+          facultySnapshot =
           await _firestore
               .collection('faculty')
               .where(
@@ -546,11 +617,20 @@ class NotificationService {
               .get();
 
       if (facultySnapshot.docs.isNotEmpty) {
-        final Map<String, dynamic> data = facultySnapshot.docs.first.data();
+        final Map<String, dynamic> data =
+            facultySnapshot.docs.first.data();
 
-        final String status = data['status']?.toString().toLowerCase() ?? '';
+        final String status =
+            data['status']
+                    ?.toString()
+                    .toLowerCase() ??
+                '';
 
-        final String role = data['role']?.toString().toLowerCase() ?? '';
+        final String role =
+            data['role']
+                    ?.toString()
+                    .toLowerCase() ??
+                '';
 
         debugPrint(
           'Faculty status: $status',
@@ -560,7 +640,8 @@ class NotificationService {
           'Faculty role: $role',
         );
 
-        if (status == 'active' && role == 'faculty') {
+        if (status == 'active' &&
+            role == 'faculty') {
           await _fcm.subscribeToTopic(
             'faculty',
           );
@@ -570,30 +651,24 @@ class NotificationService {
           );
 
           debugPrint(
-            '==========================================',
+            '✅ Faculty subscribed to: faculty',
           );
+
           debugPrint(
-            '✅ FACULTY TOPIC SUBSCRIBED',
-          );
-          debugPrint(
-            'Topic: faculty',
-          );
-          debugPrint(
-            'Topic: all_staff',
-          );
-          debugPrint(
-            '==========================================',
+            '✅ Faculty subscribed to: all_staff',
           );
 
           return;
         }
       }
 
-      // ===========================================================
-      // STUDENT
-      // ===========================================================
+      /// ======================================================
+      /// STUDENT
+      /// ======================================================
 
-      final QuerySnapshot<Map<String, dynamic>> studentSnapshot =
+      final QuerySnapshot<
+              Map<String, dynamic>>
+          studentSnapshot =
           await _firestore
               .collection('students')
               .where(
@@ -604,94 +679,216 @@ class NotificationService {
               .get();
 
       if (studentSnapshot.docs.isNotEmpty) {
-        final Map<String, dynamic> data = studentSnapshot.docs.first.data();
+        final Map<String, dynamic> data =
+            studentSnapshot.docs.first.data();
 
-        final String status = data['status']?.toString().toLowerCase() ?? '';
+        final String status =
+            data['status']
+                    ?.toString()
+                    .toLowerCase() ??
+                '';
 
-        final String? semester = data['semester']?.toString();
+        final String rawSemester =
+            data['semester']
+                    ?.toString()
+                    .trim() ??
+                '';
 
+        debugPrint('');
+        debugPrint(
+          '==========================================',
+        );
+        debugPrint(
+          '🎓 STUDENT NOTIFICATION REGISTRATION',
+        );
+        debugPrint(
+          'Student email: ${user.email}',
+        );
         debugPrint(
           'Student status: $status',
         );
+        debugPrint(
+          'Student semester: $rawSemester',
+        );
+        debugPrint(
+          '==========================================',
+        );
 
-        if (status == 'approved') {
-          await _fcm.subscribeToTopic(
-            'all_students',
-          );
+        /// ----------------------------------------------------
+        /// ONLY APPROVED STUDENTS
+        /// ----------------------------------------------------
 
+        if (status != 'approved') {
           debugPrint(
-            '✅ Topic subscribed: all_students',
-          );
-
-          if (semester != null && semester.isNotEmpty) {
-            final String semesterTopic =
-                'semester_${semester.toLowerCase().replaceAll(' ', '_')}';
-
-            await _fcm.subscribeToTopic(
-              semesterTopic,
-            );
-
-            debugPrint(
-              '✅ Semester topic subscribed: '
-              '$semesterTopic',
-            );
-          }
-
-          debugPrint(
-            '==========================================',
-          );
-          debugPrint(
-            '✅ STUDENT TOPIC SUBSCRIBED',
-          );
-          debugPrint(
-            '==========================================',
+            '⚠️ Student is not approved.',
           );
 
           return;
         }
+
+        /// ----------------------------------------------------
+        /// ALL STUDENTS TOPIC
+        /// ----------------------------------------------------
+
+        await _fcm.subscribeToTopic(
+          'all_students',
+        );
+
+        debugPrint(
+          '✅ Student subscribed to: all_students',
+        );
+
+        /// ----------------------------------------------------
+        /// SEMESTER TOPIC
+        /// ----------------------------------------------------
+        ///
+        /// Supported examples:
+        ///
+        /// 1
+        /// 2
+        /// 3
+        /// 4
+        /// 5
+        /// 6
+        ///
+        /// 1st Semester
+        /// 2nd Semester
+        /// 3rd Semester
+        /// 4th Semester
+        /// 5th Semester
+        /// 6th Semester
+        ///
+        /// Semester 1
+        /// Semester 2
+        /// etc.
+        ///
+        /// Result:
+        ///
+        /// semester_1
+        /// semester_2
+        /// semester_3
+        /// ...
+        /// semester_6
+        /// ----------------------------------------------------
+
+        final RegExp semesterRegex =
+            RegExp(r'[1-6]');
+
+        final RegExpMatch? match =
+            semesterRegex.firstMatch(
+          rawSemester,
+        );
+
+        if (match == null) {
+          debugPrint('');
+          debugPrint(
+            '❌ SEMESTER NUMBER NOT FOUND',
+          );
+          debugPrint(
+            'Firestore semester value: $rawSemester',
+          );
+
+          return;
+        }
+
+        final String semesterNumber =
+            match.group(0)!;
+
+        final String semesterTopic =
+            'semester_$semesterNumber';
+
+        debugPrint('');
+        debugPrint(
+          '🔎 Semester detected: $semesterNumber',
+        );
+
+        debugPrint(
+          '🔎 Topic to subscribe: $semesterTopic',
+        );
+
+        /// ----------------------------------------------------
+        /// SUBSCRIBE SEMESTER TOPIC
+        /// ----------------------------------------------------
+
+        await _fcm.subscribeToTopic(
+          semesterTopic,
+        );
+
+        debugPrint('');
+        debugPrint(
+          '==========================================',
+        );
+        debugPrint(
+          '✅ STUDENT SEMESTER TOPIC SUBSCRIBED',
+        );
+        debugPrint(
+          'Student semester: $rawSemester',
+        );
+        debugPrint(
+          'FCM topic: $semesterTopic',
+        );
+        debugPrint(
+          '==========================================',
+        );
+
+        return;
       }
+
+      /// ======================================================
+      /// NO USER ROLE FOUND
+      /// ======================================================
 
       debugPrint(
         '⚠️ No active HOD/faculty or approved student found.',
       );
     } catch (e, stackTrace) {
+      debugPrint('');
       debugPrint(
-        '❌ Topic subscription error: '
-        '${e.toString()}',
+        '==========================================',
       );
       debugPrint(
+        '❌ TOPIC SUBSCRIPTION ERROR',
+      );
+      debugPrint(e.toString());
+      debugPrint(
         stackTrace.toString(),
+      );
+      debugPrint(
+        '==========================================',
       );
     }
   }
 
-  // ===============================================================
-  // SHOW FOREGROUND NOTIFICATION
-  // ===============================================================
+  /// ==========================================================
+  /// FOREGROUND NOTIFICATION
+  /// ==========================================================
 
   Future<void> _showForegroundNotification(
     RemoteMessage message,
   ) async {
     try {
-      final RemoteNotification? notification = message.notification;
+      final RemoteNotification? notification =
+          message.notification;
 
-      final String title = notification?.title ??
-          message.data['title']?.toString() ??
-          'BCA Department';
+      final String title =
+          notification?.title ??
+              message.data['title']
+                  ?.toString() ??
+              'BCA Department';
 
-      final String body = notification?.body ??
-          message.data['body']?.toString() ??
-          'You have a new notification.';
+      final String body =
+          notification?.body ??
+              message.data['body']
+                  ?.toString() ??
+              'You have a new notification.';
 
-      // -----------------------------------------------------------
-      // ANDROID NOTIFICATION DETAILS
-      // -----------------------------------------------------------
-
-      const AndroidNotificationDetails androidDetails =
+      const AndroidNotificationDetails
+          androidDetails =
           AndroidNotificationDetails(
         _channelId,
         _channelName,
-        channelDescription: _channelDescription,
+        channelDescription:
+            _channelDescription,
         importance: Importance.max,
         priority: Priority.high,
         icon: 'notification_icon',
@@ -700,28 +897,36 @@ class NotificationService {
         ticker: 'BCA Department',
       );
 
-      // IMPORTANT:
-      // NotificationDetails must NOT be const here.
-      // androidDetails is a runtime/reference value.
+      const DarwinNotificationDetails
+          iosDetails =
+          DarwinNotificationDetails(
+        presentAlert: true,
+        presentBadge: true,
+        presentSound: true,
+      );
 
-      final NotificationDetails notificationDetails = NotificationDetails(
+      const NotificationDetails
+          notificationDetails =
+          NotificationDetails(
         android: androidDetails,
-        iOS: const DarwinNotificationDetails(
-          presentAlert: true,
-          presentBadge: true,
-          presentSound: true,
-        ),
+        iOS: iosDetails,
       );
 
       final int notificationId =
-          DateTime.now().millisecondsSinceEpoch.remainder(2147483647);
+          DateTime.now()
+              .millisecondsSinceEpoch
+              .remainder(2147483647);
 
       await _localNotifications.show(
         id: notificationId,
         title: title,
         body: body,
-        notificationDetails: notificationDetails,
-        payload: message.data['route']?.toString() ?? '',
+        notificationDetails:
+            notificationDetails,
+        payload:
+            message.data['route']
+                    ?.toString() ??
+                '',
       );
 
       debugPrint(
@@ -729,18 +934,18 @@ class NotificationService {
       );
     } catch (e, stackTrace) {
       debugPrint(
-        '❌ Failed to show foreground notification: '
-        '${e.toString()}',
+        '❌ Failed to show foreground notification: $e',
       );
+
       debugPrint(
         stackTrace.toString(),
       );
     }
   }
 
-  // ===============================================================
-  // LOCAL NOTIFICATION TAP
-  // ===============================================================
+  /// ==========================================================
+  /// LOCAL NOTIFICATION TAP
+  /// ==========================================================
 
   void _onLocalNotificationTap(
     NotificationResponse response,
@@ -753,42 +958,46 @@ class NotificationService {
       'Payload: ${response.payload}',
     );
 
-    final String? payload = response.payload;
+    final String? payload =
+        response.payload;
 
-    if (payload != null && payload.isNotEmpty) {
+    if (payload != null &&
+        payload.isNotEmpty) {
       _handleRoute(payload);
     }
   }
 
-  // ===============================================================
-  // HANDLE FCM NOTIFICATION TAP
-  // ===============================================================
+  /// ==========================================================
+  /// FCM NOTIFICATION TAP
+  /// ==========================================================
 
   void _handleNotificationTap(
     Map<String, dynamic> data,
   ) {
     try {
-      final String? route = data['route']?.toString();
+      final String? route =
+          data['route']?.toString();
 
-      if (route == null || route.isEmpty) {
+      if (route == null ||
+          route.isEmpty) {
         debugPrint(
           '⚠️ Notification has no route.',
         );
+
         return;
       }
 
       _handleRoute(route);
     } catch (e) {
       debugPrint(
-        '❌ Notification tap handling error: '
-        '${e.toString()}',
+        '❌ Notification tap handling error: $e',
       );
     }
   }
 
-  // ===============================================================
-  // HANDLE ROUTE
-  // ===============================================================
+  /// ==========================================================
+  /// HANDLE ROUTE
+  /// ==========================================================
 
   void _handleRoute(
     String route,
@@ -797,23 +1006,12 @@ class NotificationService {
       '📍 Notification route: $route',
     );
 
-    // Navigation can be connected here later.
-    //
-    // Example:
-    //
-    // if (route == 'pending_students') {
-    //   navigatorKey.currentState?.push(
-    //     MaterialPageRoute(
-    //       builder: (_) =>
-    //           const PendingStudentsScreen(),
-    //     ),
-    //   );
-    // }
+    /// Future me Navigator logic add kar sakte ho.
   }
 
-  // ===============================================================
-  // MANUAL TOPIC SUBSCRIBE
-  // ===============================================================
+  /// ==========================================================
+  /// MANUAL SUBSCRIBE
+  /// ==========================================================
 
   Future<void> subscribeToTopic(
     String topic,
@@ -829,14 +1027,14 @@ class NotificationService {
     } catch (e) {
       debugPrint(
         '❌ Failed to subscribe to topic '
-        '$topic: ${e.toString()}',
+        '$topic: $e',
       );
     }
   }
 
-  // ===============================================================
-  // MANUAL TOPIC UNSUBSCRIBE
-  // ===============================================================
+  /// ==========================================================
+  /// UNSUBSCRIBE
+  /// ==========================================================
 
   Future<void> unsubscribeFromTopic(
     String topic,
@@ -852,38 +1050,45 @@ class NotificationService {
     } catch (e) {
       debugPrint(
         '❌ Failed to unsubscribe from topic '
-        '$topic: ${e.toString()}',
+        '$topic: $e',
       );
     }
   }
 
-  // ===============================================================
-  // GET FCM TOKEN
-  // ===============================================================
+  /// ==========================================================
+  /// GET TOKEN
+  /// ==========================================================
 
   Future<String?> getToken() async {
     try {
-      final String? token = await _fcm.getToken();
+      final String? token =
+          await _fcm.getToken();
 
+      debugPrint('');
       debugPrint(
-        '🔥 Current FCM Token:',
+        '==========================================',
+      );
+      debugPrint(
+        '🔥 CURRENT FCM TOKEN',
       );
       debugPrint(token);
+      debugPrint(
+        '==========================================',
+      );
 
       return token;
     } catch (e) {
       debugPrint(
-        '❌ Failed to get FCM token: '
-        '${e.toString()}',
+        '❌ Failed to get FCM token: $e',
       );
 
       return null;
     }
   }
 
-  // ===============================================================
-  // DELETE FCM TOKEN
-  // ===============================================================
+  /// ==========================================================
+  /// DELETE TOKEN
+  /// ==========================================================
 
   Future<void> deleteToken() async {
     try {
@@ -894,8 +1099,7 @@ class NotificationService {
       );
     } catch (e) {
       debugPrint(
-        '❌ Failed to delete FCM token: '
-        '${e.toString()}',
+        '❌ Failed to delete FCM token: $e',
       );
     }
   }

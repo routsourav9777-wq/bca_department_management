@@ -7,9 +7,16 @@ import 'core/constants/app_constants.dart';
 import 'core/theme/app_theme.dart';
 import 'screens/splash/welcome_screen.dart';
 import 'services/notification_service.dart';
+import 'services/update.dart';
+
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // ============================================================
+  // FIREBASE
+  // ============================================================
 
   try {
     await Firebase.initializeApp(
@@ -25,10 +32,17 @@ Future<void> main() async {
     );
   }
 
-  /// Register background FCM handler
+  // ============================================================
+  // BACKGROUND FCM
+  // ============================================================
+
   FirebaseMessaging.onBackgroundMessage(
     firebaseMessagingBackgroundHandler,
   );
+
+  // ============================================================
+  // NOTIFICATION SERVICE
+  // ============================================================
 
   try {
     await NotificationService.instance.initialize();
@@ -42,19 +56,50 @@ Future<void> main() async {
     );
   }
 
+  // ============================================================
+  // RUN APP
+  // ============================================================
+
   runApp(
     const BCADeptApp(),
   );
 }
 
-class BCADeptApp extends StatelessWidget {
-  const BCADeptApp({super.key});
+// =================================================================
+// APP
+// =================================================================
+
+class BCADeptApp extends StatefulWidget {
+  const BCADeptApp({
+    super.key,
+  });
+
+  @override
+  State<BCADeptApp> createState() => _BCADeptAppState();
+}
+
+class _BCADeptAppState extends State<BCADeptApp> {
+  @override
+  void initState() {
+    super.initState();
+
+    // ------------------------------------------------------------
+    // AUTOMATIC UPDATE CHECK
+    // ------------------------------------------------------------
+
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) {
+        AppUpdateService.instance.checkForUpdateAutomatically();
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: AppConstants.appTitle,
       debugShowCheckedModeBanner: false,
+      navigatorKey: navigatorKey,
       theme: AppTheme.lightTheme,
       home: const WelcomeScreen(),
     );

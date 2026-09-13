@@ -21,6 +21,7 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final FirebaseAuth _auth = FirebaseAuth.instance;
+
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   final TextEditingController _emailController = TextEditingController();
@@ -28,6 +29,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _passwordController = TextEditingController();
 
   bool _isLoading = false;
+
   bool _obscurePassword = true;
 
   // ============================================================
@@ -36,17 +38,37 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> _registerNotifications() async {
     try {
+      debugPrint('');
+      debugPrint(
+        '==========================================',
+      );
+      debugPrint(
+        '🔔 STARTING NOTIFICATION REGISTRATION',
+      );
+      debugPrint(
+        '==========================================',
+      );
+
       await NotificationService.instance.registerLoggedInUser().timeout(
-            const Duration(seconds: 10),
+        const Duration(seconds: 15),
+        onTimeout: () {
+          debugPrint(
+            '⚠️ Notification registration timed out.',
           );
+        },
+      );
 
       debugPrint(
-        'Notification registration completed.',
+        '✅ Notification registration process completed.',
       );
-    } catch (e) {
-      // Notification error should NEVER stop login.
+    } catch (e, stackTrace) {
+      // Notification failure must NEVER block login.
       debugPrint(
-        'Notification registration failed: $e',
+        '❌ Notification registration failed: $e',
+      );
+
+      debugPrint(
+        stackTrace.toString(),
       );
     }
   }
@@ -61,11 +83,12 @@ class _LoginScreenState extends State<LoginScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            "Please enter email and password",
+            'Please enter email and password',
           ),
           backgroundColor: Colors.red,
         ),
       );
+
       return;
     }
 
@@ -95,12 +118,25 @@ class _LoginScreenState extends State<LoginScreen> {
 
       if (user == null) {
         throw Exception(
-          "Firebase user not found after login.",
+          'Firebase user not found after login.',
         );
       }
 
+      debugPrint('');
       debugPrint(
-        "Firebase login successful: ${user.email}",
+        '==========================================',
+      );
+      debugPrint(
+        '✅ FIREBASE LOGIN SUCCESSFUL',
+      );
+      debugPrint(
+        'Email: ${user.email}',
+      );
+      debugPrint(
+        'UID: ${user.uid}',
+      );
+      debugPrint(
+        '==========================================',
       );
 
       // ========================================================
@@ -123,11 +159,11 @@ class _LoginScreenState extends State<LoginScreen> {
 
         if (status == 'active') {
           debugPrint(
-            'HOD login authorized.',
+            '✅ HOD login authorized.',
           );
 
           // ----------------------------------------------------
-          // REGISTER FCM TOKEN
+          // REGISTER NOTIFICATION
           // ----------------------------------------------------
 
           await _registerNotifications();
@@ -166,17 +202,40 @@ class _LoginScreenState extends State<LoginScreen> {
         final String status =
             studentData['status']?.toString().toLowerCase() ?? '';
 
-        // ------------------------------------------------------
+        final String semester =
+            studentData['semester']?.toString().trim() ?? '';
+
+        debugPrint('');
+        debugPrint(
+          '==========================================',
+        );
+        debugPrint(
+          '🎓 STUDENT LOGIN DATA',
+        );
+        debugPrint(
+          'Email: $email',
+        );
+        debugPrint(
+          'Status: $status',
+        );
+        debugPrint(
+          'Semester: $semester',
+        );
+        debugPrint(
+          '==========================================',
+        );
+
+        // ======================================================
         // STUDENT APPROVED
-        // ------------------------------------------------------
+        // ======================================================
 
         if (status == 'approved') {
           debugPrint(
-            'Student login authorized.',
+            '✅ Student login authorized.',
           );
 
           // ----------------------------------------------------
-          // REGISTER FCM TOKEN
+          // REGISTER FCM TOKEN + TOPICS
           // ----------------------------------------------------
 
           await _registerNotifications();
@@ -195,9 +254,9 @@ class _LoginScreenState extends State<LoginScreen> {
           return;
         }
 
-        // ------------------------------------------------------
+        // ======================================================
         // STUDENT PENDING
-        // ------------------------------------------------------
+        // ======================================================
 
         if (status == 'pending') {
           await _auth.signOut();
@@ -209,8 +268,8 @@ class _LoginScreenState extends State<LoginScreen> {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text(
-                "Your registration is still pending.\n"
-                "Please wait for HOD approval.",
+                'Your registration is still pending.\n'
+                'Please wait for HOD approval.',
               ),
               backgroundColor: Colors.orange,
             ),
@@ -219,9 +278,9 @@ class _LoginScreenState extends State<LoginScreen> {
           return;
         }
 
-        // ------------------------------------------------------
+        // ======================================================
         // STUDENT REJECTED
-        // ------------------------------------------------------
+        // ======================================================
 
         if (status == 'rejected') {
           await _auth.signOut();
@@ -233,7 +292,7 @@ class _LoginScreenState extends State<LoginScreen> {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text(
-                "Your registration has been rejected by the HOD.",
+                'Your registration has been rejected by the HOD.',
               ),
               backgroundColor: Colors.red,
             ),
@@ -266,11 +325,11 @@ class _LoginScreenState extends State<LoginScreen> {
 
         if (status == 'active' && role == 'faculty') {
           debugPrint(
-            'Faculty login authorized.',
+            '✅ Faculty login authorized.',
           );
 
           // ----------------------------------------------------
-          // REGISTER FCM TOKEN
+          // REGISTER NOTIFICATION
           // ----------------------------------------------------
 
           await _registerNotifications();
@@ -303,33 +362,33 @@ class _LoginScreenState extends State<LoginScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            "Account not authorized for this portal.",
+            'Account not authorized for this portal.',
           ),
           backgroundColor: Colors.red,
         ),
       );
     } on FirebaseAuthException catch (e) {
       debugPrint(
-        "Firebase Auth Error: "
-        "${e.code} - ${e.message}",
+        'Firebase Auth Error: '
+        '${e.code} - ${e.message}',
       );
 
-      String message = "Login Failed";
+      String message = 'Login Failed';
 
       if (e.code == 'user-not-found') {
-        message = "No account found with this email.";
+        message = 'No account found with this email.';
       } else if (e.code == 'wrong-password' || e.code == 'invalid-credential') {
-        message = "Invalid email or password.";
+        message = 'Invalid email or password.';
       } else if (e.code == 'user-disabled') {
-        message = "This account has been disabled.";
+        message = 'This account has been disabled.';
       } else if (e.code == 'invalid-email') {
-        message = "Invalid email address.";
+        message = 'Invalid email address.';
       } else if (e.code == 'too-many-requests') {
-        message = "Too many login attempts. Please try again later.";
+        message = 'Too many login attempts. Please try again later.';
       } else if (e.code == 'network-request-failed') {
-        message = "Network error. Please check your internet connection.";
+        message = 'Network error. Please check your internet connection.';
       } else if (e.code == 'operation-not-allowed') {
-        message = "Email/Password authentication is not enabled.";
+        message = 'Email/Password authentication is not enabled.';
       }
 
       if (!mounted) {
@@ -344,7 +403,7 @@ class _LoginScreenState extends State<LoginScreen> {
       );
     } catch (e) {
       debugPrint(
-        "Login error: $e",
+        'Login error: $e',
       );
 
       if (!mounted) {
@@ -354,7 +413,7 @@ class _LoginScreenState extends State<LoginScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            "Something went wrong: $e",
+            'Something went wrong: $e',
           ),
           backgroundColor: Colors.red,
         ),
@@ -376,6 +435,7 @@ class _LoginScreenState extends State<LoginScreen> {
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
+
     super.dispose();
   }
 
@@ -394,7 +454,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
           Positioned.fill(
             child: Image.asset(
-              "assets/images/college_building.jpeg",
+              'assets/images/college_building.jpeg',
               fit: BoxFit.cover,
             ),
           ),
@@ -432,14 +492,16 @@ class _LoginScreenState extends State<LoginScreen> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        // ========================================
+                        // ======================================
                         // LOGO
-                        // ========================================
+                        // ======================================
 
                         ClipRRect(
-                          borderRadius: BorderRadius.circular(15),
+                          borderRadius: BorderRadius.circular(
+                            15,
+                          ),
                           child: Image.asset(
-                            "assets/images/department_logo.png",
+                            'assets/images/department_logo.png',
                             width: 170,
                             height: 170,
                             fit: BoxFit.cover,
@@ -450,12 +512,12 @@ class _LoginScreenState extends State<LoginScreen> {
                           height: 15,
                         ),
 
-                        // ========================================
+                        // ======================================
                         // DEPARTMENT NAME
-                        // ========================================
+                        // ======================================
 
                         const Text(
-                          "Department of Computer Applications",
+                          'Department of Computer Applications',
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             fontSize: 22,
@@ -468,7 +530,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
 
                         const Text(
-                          "Salipur Autonomous College",
+                          'Salipur Autonomous College',
                           style: TextStyle(
                             color: Colors.grey,
                           ),
@@ -478,9 +540,9 @@ class _LoginScreenState extends State<LoginScreen> {
                           height: 30,
                         ),
 
-                        // ========================================
+                        // ======================================
                         // EMAIL
-                        // ========================================
+                        // ======================================
 
                         TextField(
                           controller: _emailController,
@@ -488,7 +550,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           textInputAction: TextInputAction.next,
                           autocorrect: false,
                           decoration: const InputDecoration(
-                            labelText: "Enter your Email",
+                            labelText: 'Enter your Email',
                             prefixIcon: Icon(
                               Icons.email_outlined,
                             ),
@@ -499,9 +561,9 @@ class _LoginScreenState extends State<LoginScreen> {
                           height: 18,
                         ),
 
-                        // ========================================
+                        // ======================================
                         // PASSWORD
-                        // ========================================
+                        // ======================================
 
                         TextField(
                           controller: _passwordController,
@@ -513,7 +575,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             }
                           },
                           decoration: InputDecoration(
-                            labelText: "Password",
+                            labelText: 'Password',
                             prefixIcon: const Icon(
                               Icons.lock_outline,
                             ),
@@ -536,9 +598,9 @@ class _LoginScreenState extends State<LoginScreen> {
                           height: 8,
                         ),
 
-                        // ========================================
+                        // ======================================
                         // FORGOT PASSWORD
-                        // ========================================
+                        // ======================================
 
                         Align(
                           alignment: Alignment.centerRight,
@@ -555,7 +617,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                     );
                                   },
                             child: const Text(
-                              "Forgot Password?",
+                              'Forgot Password?',
                             ),
                           ),
                         ),
@@ -564,9 +626,9 @@ class _LoginScreenState extends State<LoginScreen> {
                           height: 25,
                         ),
 
-                        // ========================================
+                        // ======================================
                         // SIGN IN BUTTON
-                        // ========================================
+                        // ======================================
 
                         SizedBox(
                           width: double.infinity,
@@ -583,7 +645,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                     ),
                                   )
                                 : const Text(
-                                    "SIGN IN",
+                                    'SIGN IN',
                                     style: TextStyle(
                                       fontSize: 16,
                                     ),
@@ -595,15 +657,15 @@ class _LoginScreenState extends State<LoginScreen> {
                           height: 25,
                         ),
 
-                        // ========================================
+                        // ======================================
                         // REGISTER
-                        // ========================================
+                        // ======================================
 
                         Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             const Text(
-                              "New Student? ",
+                              'New Student? ',
                             ),
                             GestureDetector(
                               onTap: () {
@@ -615,7 +677,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 );
                               },
                               child: const Text(
-                                "Register Here",
+                                'Register Here',
                                 style: TextStyle(
                                   color: AppTheme.primaryBlue,
                                   fontWeight: FontWeight.bold,
