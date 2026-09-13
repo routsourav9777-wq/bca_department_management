@@ -19,42 +19,164 @@ class StudentProfileScreen extends StatelessWidget {
   Future<DocumentSnapshot<Map<String, dynamic>>?> _getStudent() async {
     final User? user = _auth.currentUser;
 
+    // ----------------------------------------------------------
+    // USER NOT LOGGED IN
+    // ----------------------------------------------------------
+
     if (user == null) {
       return null;
     }
 
-    // First search by UID
-    final uidResult = await _firestore
-        .collection('students')
-        .where(
-          'uid',
-          isEqualTo: user.uid,
-        )
-        .limit(1)
-        .get();
+    final String uid = user.uid;
 
-    if (uidResult.docs.isNotEmpty) {
-      return uidResult.docs.first;
+    debugPrint(
+      '=========================================',
+    );
+
+    debugPrint(
+      'STUDENT PROFILE',
+    );
+
+    debugPrint(
+      'Firebase UID: $uid',
+    );
+
+    debugPrint(
+      'Firebase Email: ${user.email}',
+    );
+
+    debugPrint(
+      '=========================================',
+    );
+
+    // ==========================================================
+    // IMPORTANT
+    // ==========================================================
+    //
+    // Student document ID = Firebase Auth UID
+    //
+    // students/{uid}
+    //
+    // This matches the production Firestore rule:
+    //
+    // request.auth.uid == userId
+    //
+    // DO NOT use .where('email', ...)
+    // DO NOT use .where('uid', ...)
+    //
+    // ==========================================================
+
+    final DocumentSnapshot<Map<String, dynamic>> studentDocument =
+        await _firestore.collection('students').doc(uid).get();
+
+    // ==========================================================
+    // DOCUMENT NOT FOUND
+    // ==========================================================
+
+    if (!studentDocument.exists) {
+      debugPrint(
+        '❌ Student document not found.',
+      );
+
+      debugPrint(
+        'Expected document: students/$uid',
+      );
+
+      return null;
     }
 
-    // Then search by email
-    if (user.email != null) {
-      final emailResult = await _firestore
-          .collection('students')
-          .where(
-            'email',
-            isEqualTo: user.email,
-          )
-          .limit(1)
-          .get();
+    // ==========================================================
+    // DOCUMENT FOUND
+    // ==========================================================
 
-      if (emailResult.docs.isNotEmpty) {
-        return emailResult.docs.first;
-      }
-    }
+    debugPrint(
+      '✅ Student profile found.',
+    );
 
-    return null;
+    debugPrint(
+      'Document ID: ${studentDocument.id}',
+    );
+
+    debugPrint(
+      'Student data: ${studentDocument.data()}',
+    );
+
+    return studentDocument;
   }
+
+  // ============================================================
+  // NORMALIZE SEMESTER
+  // ============================================================
+
+  String _formatSemester(String semester) {
+    final String value = semester.trim();
+
+    if (value.isEmpty) {
+      return 'Not Available';
+    }
+
+    // If Firebase already contains:
+    // Semester 1
+    // Semester 2
+    // etc.
+    if (value.toLowerCase().startsWith('semester')) {
+      return value;
+    }
+
+    // If Firebase contains only:
+    // 1
+    // 2
+    // etc.
+    return 'Semester $value';
+  }
+
+  // ============================================================
+  // STATUS COLOR
+  // ============================================================
+
+  Color _statusColor(String status) {
+    final String value = status.trim().toLowerCase();
+
+    if (value == 'approved' || value == 'active') {
+      return Colors.green;
+    }
+
+    if (value == 'pending') {
+      return Colors.orange;
+    }
+
+    if (value == 'rejected') {
+      return Colors.red;
+    }
+
+    return Colors.grey;
+  }
+
+  // ============================================================
+  // STATUS ICON
+  // ============================================================
+
+  IconData _statusIcon(String status) {
+    final String value = status.trim().toLowerCase();
+
+    if (value == 'approved' || value == 'active') {
+      return Icons.check_circle;
+    }
+
+    if (value == 'pending') {
+      return Icons.pending;
+    }
+
+    if (value == 'rejected') {
+      return Icons.cancel;
+    }
+
+    return Icons.info;
+  }
+
+  // ============================================================
+  // BUILD
+  // ============================================================
 
   @override
   Widget build(BuildContext context) {
@@ -64,12 +186,17 @@ class StudentProfileScreen extends StatelessWidget {
           'Student Profile',
         ),
       ),
+
+      // ========================================================
+      // PROFILE
+      // ========================================================
+
       body: FutureBuilder<DocumentSnapshot<Map<String, dynamic>>?>(
         future: _getStudent(),
         builder: (context, snapshot) {
-          // ======================================================
+          // ====================================================
           // LOADING
-          // ======================================================
+          // ====================================================
 
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(
@@ -77,11 +204,15 @@ class StudentProfileScreen extends StatelessWidget {
             );
           }
 
-          // ======================================================
+          // ====================================================
           // ERROR
-          // ======================================================
+          // ====================================================
 
           if (snapshot.hasError) {
+            debugPrint(
+              '❌ Student Profile Error: ${snapshot.error}',
+            );
+
             return Center(
               child: Padding(
                 padding: const EdgeInsets.all(24),
@@ -98,13 +229,14 @@ class StudentProfileScreen extends StatelessWidget {
                     ),
                     const Text(
                       'Unable to load profile',
+                      textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
                     const SizedBox(
-                      height: 8,
+                      height: 10,
                     ),
                     Text(
                       '${snapshot.error}',
@@ -120,9 +252,9 @@ class StudentProfileScreen extends StatelessWidget {
             );
           }
 
-          // ======================================================
+          // ====================================================
           // PROFILE NOT FOUND
-          // ======================================================
+          // ====================================================
 
           if (!snapshot.hasData || snapshot.data == null) {
             return const Center(
@@ -141,6 +273,7 @@ class StudentProfileScreen extends StatelessWidget {
                     ),
                     Text(
                       'Student Profile Not Found',
+                      textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
@@ -150,7 +283,7 @@ class StudentProfileScreen extends StatelessWidget {
                       height: 8,
                     ),
                     Text(
-                      'Your student profile is not available in Firebase.',
+                      'Your student profile could not be found in Firebase.',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         color: Colors.grey,
@@ -162,32 +295,61 @@ class StudentProfileScreen extends StatelessWidget {
             );
           }
 
+          // ====================================================
+          // FIRESTORE DATA
+          // ====================================================
+
           final Map<String, dynamic> student = snapshot.data!.data() ?? {};
 
-          // ======================================================
-          // FIREBASE DATA
-          // ======================================================
+          // ====================================================
+          // STUDENT DETAILS
+          // ====================================================
 
-          final String name = student['name']?.toString() ?? 'Student';
+          final String name =
+              student['name']?.toString().trim().isNotEmpty == true
+                  ? student['name'].toString().trim()
+                  : 'Student';
 
-          final String rollNo = student['rollNo']?.toString() ??
-              student['rollNumber']?.toString() ??
-              'Not Available';
+          final String rollNo =
+              student['rollNo']?.toString().trim().isNotEmpty == true
+                  ? student['rollNo'].toString().trim()
+                  : student['rollNumber']?.toString().trim().isNotEmpty == true
+                      ? student['rollNumber'].toString().trim()
+                      : 'Not Available';
 
-          final String semester =
-              student['semester']?.toString() ?? 'Not Available';
+          final String semester = _formatSemester(
+            student['semester']?.toString() ?? '',
+          );
 
-          final String department = student['department']?.toString() ?? 'BCA';
+          final String department =
+              student['department']?.toString().trim().isNotEmpty == true
+                  ? student['department'].toString().trim()
+                  : 'BCA';
 
-          final String email = student['email']?.toString() ??
-              _auth.currentUser?.email ??
-              'Not Available';
+          final String email =
+              student['email']?.toString().trim().isNotEmpty == true
+                  ? student['email'].toString().trim()
+                  : _auth.currentUser?.email ?? 'Not Available';
 
-          final String phone = student['phone']?.toString() ??
-              student['phoneNumber']?.toString() ??
-              'Not Available';
+          final String phone =
+              student['phone']?.toString().trim().isNotEmpty == true
+                  ? student['phone'].toString().trim()
+                  : student['phoneNumber']?.toString().trim().isNotEmpty == true
+                      ? student['phoneNumber'].toString().trim()
+                      : 'Not Available';
 
-          final String status = student['status']?.toString() ?? 'pending';
+          final String status =
+              student['status']?.toString().trim().isNotEmpty == true
+                  ? student['status'].toString().trim()
+                  : 'pending';
+
+          final Color statusColor = _statusColor(status);
+
+          final IconData statusIcon = _statusIcon(status);
+
+          // ====================================================
+          // UI
+          // ====================================================
 
           return SingleChildScrollView(
             padding: const EdgeInsets.all(20),
@@ -225,7 +387,7 @@ class StudentProfileScreen extends StatelessWidget {
                 ),
 
                 const SizedBox(
-                  height: 5,
+                  height: 6,
                 ),
 
                 // ==================================================
@@ -233,8 +395,7 @@ class StudentProfileScreen extends StatelessWidget {
                 // ==================================================
 
                 Text(
-                  'Roll No: $rollNo • '
-                  'Semester $semester',
+                  'Roll No: $rollNo • $semester',
                   textAlign: TextAlign.center,
                   style: const TextStyle(
                     color: AppTheme.textSecondary,
@@ -252,14 +413,12 @@ class StudentProfileScreen extends StatelessWidget {
 
                 Card(
                   child: Padding(
-                    padding: const EdgeInsets.all(
-                      16,
-                    ),
+                    padding: const EdgeInsets.all(16),
                     child: Column(
                       children: [
-                        // =========================================
+                        // ==========================================
                         // COLLEGE
-                        // =========================================
+                        // ==========================================
 
                         ListTile(
                           leading: const Icon(
@@ -276,9 +435,9 @@ class StudentProfileScreen extends StatelessWidget {
 
                         const Divider(),
 
-                        // =========================================
+                        // ==========================================
                         // DEPARTMENT
-                        // =========================================
+                        // ==========================================
 
                         ListTile(
                           leading: const Icon(
@@ -295,9 +454,9 @@ class StudentProfileScreen extends StatelessWidget {
 
                         const Divider(),
 
-                        // =========================================
+                        // ==========================================
                         // EMAIL
-                        // =========================================
+                        // ==========================================
 
                         ListTile(
                           leading: const Icon(
@@ -314,9 +473,9 @@ class StudentProfileScreen extends StatelessWidget {
 
                         const Divider(),
 
-                        // =========================================
+                        // ==========================================
                         // PHONE
-                        // =========================================
+                        // ==========================================
 
                         ListTile(
                           leading: const Icon(
@@ -333,9 +492,9 @@ class StudentProfileScreen extends StatelessWidget {
 
                         const Divider(),
 
-                        // =========================================
+                        // ==========================================
                         // SEMESTER
-                        // =========================================
+                        // ==========================================
 
                         ListTile(
                           leading: const Icon(
@@ -346,26 +505,39 @@ class StudentProfileScreen extends StatelessWidget {
                             'Current Semester',
                           ),
                           subtitle: Text(
-                            'Semester $semester',
+                            semester,
                           ),
                         ),
 
                         const Divider(),
 
-                        // =========================================
+                        // ==========================================
+                        // ROLL NUMBER
+                        // ==========================================
+
+                        ListTile(
+                          leading: const Icon(
+                            Icons.badge,
+                            color: AppTheme.primaryBlue,
+                          ),
+                          title: const Text(
+                            'College Roll Number',
+                          ),
+                          subtitle: Text(
+                            rollNo,
+                          ),
+                        ),
+
+                        const Divider(),
+
+                        // ==========================================
                         // APPROVAL STATUS
-                        // =========================================
+                        // ==========================================
 
                         ListTile(
                           leading: Icon(
-                            status.toLowerCase() == 'active' ||
-                                    status.toLowerCase() == 'approved'
-                                ? Icons.check_circle
-                                : Icons.pending,
-                            color: status.toLowerCase() == 'active' ||
-                                    status.toLowerCase() == 'approved'
-                                ? Colors.green
-                                : Colors.orange,
+                            statusIcon,
+                            color: statusColor,
                           ),
                           title: const Text(
                             'HOD Approval Status',
@@ -373,15 +545,38 @@ class StudentProfileScreen extends StatelessWidget {
                           subtitle: Text(
                             status.toUpperCase(),
                             style: TextStyle(
-                              color: status.toLowerCase() == 'active' ||
-                                      status.toLowerCase() == 'approved'
-                                  ? Colors.green
-                                  : Colors.orange,
+                              color: statusColor,
                               fontWeight: FontWeight.bold,
                             ),
                           ),
                         ),
                       ],
+                    ),
+                  ),
+                ),
+
+                const SizedBox(
+                  height: 20,
+                ),
+
+                // ==================================================
+                // UID INFORMATION
+                // ==================================================
+
+                Card(
+                  child: ListTile(
+                    leading: const Icon(
+                      Icons.fingerprint,
+                      color: AppTheme.primaryBlue,
+                    ),
+                    title: const Text(
+                      'Student UID',
+                    ),
+                    subtitle: Text(
+                      _auth.currentUser?.uid ?? 'Not Available',
+                      style: const TextStyle(
+                        fontSize: 12,
+                      ),
                     ),
                   ),
                 ),

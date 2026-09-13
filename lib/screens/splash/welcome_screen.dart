@@ -21,14 +21,28 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
   Timer? _timer;
 
   // ============================================================
-  // ACTUAL DEVICE AUTHENTICATION
+  // FIREBASE
+  // ============================================================
+
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+
+  // ============================================================
+  // LOCAL AUTHENTICATION
   // ============================================================
 
   final LocalAuthentication _localAuth = LocalAuthentication();
 
   bool _authenticationInProgress = false;
+
   bool _checkingAccount = false;
+
   bool _showUnlockScreen = false;
+
+  // ============================================================
+  // INIT
+  // ============================================================
 
   @override
   void initState() {
@@ -40,6 +54,10 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
     );
   }
 
+  // ============================================================
+  // DISPOSE
+  // ============================================================
+
   @override
   void dispose() {
     _timer?.cancel();
@@ -47,7 +65,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
   }
 
   // ============================================================
-  // CHECK FIREBASE LOGIN SESSION
+  // CHECK LOGIN STATUS
   // ============================================================
 
   Future<void> _checkLoginStatus() async {
@@ -55,28 +73,27 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
 
     if (_checkingAccount) return;
 
-    final FirebaseAuth auth = FirebaseAuth.instance;
+    final User? user = _auth.currentUser;
 
-    final User? user = auth.currentUser;
-
+    debugPrint('');
     debugPrint(
-      '=========================================',
+      '==========================================',
     );
-
     debugPrint(
-      'Firebase current user: ${user?.email}',
+      '🔐 CHECKING FIREBASE SESSION',
     );
-
     debugPrint(
-      'Firebase UID: ${user?.uid}',
+      'Email: ${user?.email}',
     );
-
     debugPrint(
-      '=========================================',
+      'UID: ${user?.uid}',
+    );
+    debugPrint(
+      '==========================================',
     );
 
     // ==========================================================
-    // NO FIREBASE USER
+    // NO USER
     // ==========================================================
 
     if (user == null) {
@@ -85,25 +102,27 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
       );
 
       _openLogin();
+
       return;
     }
 
     // ==========================================================
-    // GET EMAIL
+    // GET UID
     // ==========================================================
 
-    final String email = (user.email ?? '').trim().toLowerCase();
+    final String uid = user.uid;
 
-    if (email.isEmpty) {
+    if (uid.trim().isEmpty) {
       debugPrint(
-        'Firebase user has no email.',
+        'Firebase user UID is empty.',
       );
 
-      await auth.signOut();
+      await _auth.signOut();
 
       if (!mounted) return;
 
       _openLogin();
+
       return;
     }
 
@@ -116,7 +135,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
     if (!mounted) return;
 
     // ==========================================================
-    // AUTHENTICATION FAILED / CANCELLED
+    // AUTHENTICATION FAILED
     // ==========================================================
 
     if (!authenticated) {
@@ -137,12 +156,11 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
 
     await _openCorrectDashboard(
       user,
-      email,
     );
   }
 
   // ============================================================
-  // ACTUAL PHONE AUTHENTICATION
+  // PHONE AUTHENTICATION
   // ============================================================
 
   Future<bool> _authenticateWithPhone() async {
@@ -154,7 +172,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
 
     try {
       // ========================================================
-      // CHECK DEVICE SUPPORT
+      // DEVICE SUPPORT
       // ========================================================
 
       final bool isDeviceSupported = await _localAuth.isDeviceSupported();
@@ -170,7 +188,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
       );
 
       // ========================================================
-      // DEVICE DOES NOT SUPPORT AUTHENTICATION
+      // NO AUTHENTICATION SUPPORT
       // ========================================================
 
       if (!isDeviceSupported && !canCheckBiometrics) {
@@ -178,27 +196,21 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
           'Device authentication not supported.',
         );
 
-        return false;
+        // Device authentication unavailable.
+        // Allow the app to continue.
+        return true;
       }
 
       // ========================================================
-      // OPEN REAL PHONE AUTHENTICATION
+      // REAL DEVICE AUTHENTICATION
       // ========================================================
 
       final bool authenticated = await _localAuth.authenticate(
         localizedReason:
             'Use your fingerprint, Face ID, PIN or phone lock to open the BCA Department Management App.',
         options: const AuthenticationOptions(
-          // false means:
-          // Fingerprint + PIN + Pattern + Passcode
-          // can be used according to device support.
           biometricOnly: false,
-
-          // Keep authentication working properly
-          // if app goes temporarily into background.
           stickyAuth: true,
-
-          // Allow Android system authentication dialogs.
           useErrorDialogs: true,
         ),
       );
@@ -225,45 +237,77 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
 
   Future<void> _openCorrectDashboard(
     User user,
-    String email,
   ) async {
     if (_checkingAccount) return;
 
     _checkingAccount = true;
 
     try {
-      final FirebaseFirestore firestore = FirebaseFirestore.instance;
+      final String uid = user.uid;
 
-      final FirebaseAuth auth = FirebaseAuth.instance;
+      final String email = (user.email ?? '').trim().toLowerCase();
+
+      debugPrint('');
+      debugPrint(
+        '==========================================',
+      );
+      debugPrint(
+        '🔎 CHECKING ACCOUNT USING UID',
+      );
+      debugPrint(
+        'UID: $uid',
+      );
+      debugPrint(
+        'Email: $email',
+      );
+      debugPrint(
+        '==========================================',
+      );
 
       // ========================================================
-      // 1. CHECK HOD
+      // 1. CHECK HOD USING UID
       // ========================================================
 
       debugPrint(
-        'Checking HOD account...',
+        'Checking HOD/$uid ...',
       );
 
-      final QuerySnapshot<Map<String, dynamic>> hodQuery = await firestore
-          .collection('hod')
-          .where(
-            'email',
-            isEqualTo: email,
-          )
-          .limit(1)
-          .get();
+      final DocumentSnapshot<Map<String, dynamic>> hodDocument =
+          await _firestore.collection('hod').doc(uid).get();
 
-      if (hodQuery.docs.isNotEmpty) {
-        final Map<String, dynamic> data = hodQuery.docs.first.data();
+      if (hodDocument.exists) {
+        final Map<String, dynamic> data = hodDocument.data() ?? {};
+
+        final String role = data['role']?.toString().trim().toLowerCase() ?? '';
 
         final String status =
             data['status']?.toString().trim().toLowerCase() ?? '';
 
+        final String department =
+            data['department']?.toString().trim().toUpperCase() ?? '';
+
+        debugPrint('');
         debugPrint(
-          'HOD status: $status',
+          '========== HOD DATA ==========',
+        );
+        debugPrint(
+          'Role: $role',
+        );
+        debugPrint(
+          'Status: $status',
+        );
+        debugPrint(
+          'Department: $department',
+        );
+        debugPrint(
+          '==============================',
         );
 
-        if (status == 'active') {
+        if (role == 'hod' && status == 'active' && department == 'BCA') {
+          debugPrint(
+            '✅ HOD account authorized.',
+          );
+
           if (!mounted) return;
 
           Navigator.pushReplacement(
@@ -275,42 +319,56 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
 
           return;
         }
+      } else {
+        debugPrint(
+          'HOD document not found.',
+        );
       }
 
       // ========================================================
-      // 2. CHECK FACULTY
+      // 2. CHECK FACULTY USING UID
       // ========================================================
 
       debugPrint(
-        'Checking Faculty account...',
+        'Checking faculty/$uid ...',
       );
 
-      final QuerySnapshot<Map<String, dynamic>> facultyQuery = await firestore
-          .collection('faculty')
-          .where(
-            'email',
-            isEqualTo: email,
-          )
-          .limit(1)
-          .get();
+      final DocumentSnapshot<Map<String, dynamic>> facultyDocument =
+          await _firestore.collection('faculty').doc(uid).get();
 
-      if (facultyQuery.docs.isNotEmpty) {
-        final Map<String, dynamic> data = facultyQuery.docs.first.data();
+      if (facultyDocument.exists) {
+        final Map<String, dynamic> data = facultyDocument.data() ?? {};
+
+        final String role = data['role']?.toString().trim().toLowerCase() ?? '';
 
         final String status =
             data['status']?.toString().trim().toLowerCase() ?? '';
 
-        final String role = data['role']?.toString().trim().toLowerCase() ?? '';
+        final String department =
+            data['department']?.toString().trim().toUpperCase() ?? '';
 
+        debugPrint('');
         debugPrint(
-          'Faculty status: $status',
+          '========== FACULTY DATA ==========',
+        );
+        debugPrint(
+          'Role: $role',
+        );
+        debugPrint(
+          'Status: $status',
+        );
+        debugPrint(
+          'Department: $department',
+        );
+        debugPrint(
+          '==================================',
         );
 
-        debugPrint(
-          'Faculty role: $role',
-        );
+        if (role == 'faculty' && status == 'active' && department == 'BCA') {
+          debugPrint(
+            '✅ Faculty account authorized.',
+          );
 
-        if (status == 'active' && role == 'faculty') {
           if (!mounted) return;
 
           Navigator.pushReplacement(
@@ -322,40 +380,65 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
 
           return;
         }
+      } else {
+        debugPrint(
+          'Faculty document not found.',
+        );
       }
 
       // ========================================================
-      // 3. CHECK STUDENT
+      // 3. CHECK STUDENT USING UID
       // ========================================================
 
       debugPrint(
-        'Checking Student account...',
+        'Checking students/$uid ...',
       );
 
-      final QuerySnapshot<Map<String, dynamic>> studentQuery = await firestore
-          .collection('students')
-          .where(
-            'email',
-            isEqualTo: email,
-          )
-          .limit(1)
-          .get();
+      final DocumentSnapshot<Map<String, dynamic>> studentDocument =
+          await _firestore.collection('students').doc(uid).get();
 
-      if (studentQuery.docs.isNotEmpty) {
-        final Map<String, dynamic> data = studentQuery.docs.first.data();
+      if (studentDocument.exists) {
+        final Map<String, dynamic> data = studentDocument.data() ?? {};
+
+        final String role = data['role']?.toString().trim().toLowerCase() ?? '';
 
         final String status =
             data['status']?.toString().trim().toLowerCase() ?? '';
 
+        final String department =
+            data['department']?.toString().trim().toUpperCase() ?? '';
+
+        final String semester = data['semester']?.toString().trim() ?? '';
+
+        debugPrint('');
         debugPrint(
-          'Student status: $status',
+          '========== STUDENT DATA ==========',
+        );
+        debugPrint(
+          'Role: $role',
+        );
+        debugPrint(
+          'Status: $status',
+        );
+        debugPrint(
+          'Department: $department',
+        );
+        debugPrint(
+          'Semester: $semester',
+        );
+        debugPrint(
+          '==================================',
         );
 
-        // ------------------------------------------------------
+        // ======================================================
         // STUDENT APPROVED
-        // ------------------------------------------------------
+        // ======================================================
 
-        if (status == 'approved') {
+        if (role == 'student' && department == 'BCA' && status == 'approved') {
+          debugPrint(
+            '✅ Student account authorized.',
+          );
+
           if (!mounted) return;
 
           Navigator.pushReplacement(
@@ -368,12 +451,16 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
           return;
         }
 
-        // ------------------------------------------------------
+        // ======================================================
         // STUDENT PENDING
-        // ------------------------------------------------------
+        // ======================================================
 
         if (status == 'pending') {
-          await auth.signOut();
+          debugPrint(
+            '⏳ Student account pending.',
+          );
+
+          await _auth.signOut();
 
           if (!mounted) return;
 
@@ -388,12 +475,16 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
           return;
         }
 
-        // ------------------------------------------------------
+        // ======================================================
         // STUDENT REJECTED
-        // ------------------------------------------------------
+        // ======================================================
 
         if (status == 'rejected') {
-          await auth.signOut();
+          debugPrint(
+            '❌ Student account rejected.',
+          );
+
+          await _auth.signOut();
 
           if (!mounted) return;
 
@@ -407,11 +498,11 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
           return;
         }
 
-        // ------------------------------------------------------
-        // OTHER STUDENT STATUS
-        // ------------------------------------------------------
+        // ======================================================
+        // INVALID STUDENT STATUS
+        // ======================================================
 
-        await auth.signOut();
+        await _auth.signOut();
 
         if (!mounted) return;
 
@@ -423,17 +514,22 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
         _openLogin();
 
         return;
+      } else {
+        debugPrint(
+          'Student document not found.',
+        );
       }
 
       // ========================================================
       // ACCOUNT NOT FOUND
       // ========================================================
 
+      debugPrint('');
       debugPrint(
-        'No HOD, Faculty or Student account found.',
+        '❌ No valid HOD, Faculty or Student account found.',
       );
 
-      await auth.signOut();
+      await _auth.signOut();
 
       if (!mounted) return;
 
@@ -443,9 +539,36 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
       );
 
       _openLogin();
+    } on FirebaseException catch (e) {
+      // ========================================================
+      // FIREBASE / FIRESTORE ERROR
+      // ========================================================
+
+      debugPrint('');
+      debugPrint(
+        '==========================================',
+      );
+      debugPrint(
+        '❌ FIRESTORE ERROR',
+      );
+      debugPrint(
+        'Code: ${e.code}',
+      );
+      debugPrint(
+        'Message: ${e.message}',
+      );
+      debugPrint(
+        '==========================================',
+      );
+
+      if (!mounted) return;
+
+      _showFirestoreError(
+        e,
+      );
     } catch (e) {
       // ========================================================
-      // FIRESTORE ERROR
+      // OTHER ERROR
       // ========================================================
 
       debugPrint(
@@ -454,11 +577,10 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
 
       if (!mounted) return;
 
-      // IMPORTANT:
-      // Firebase user ko signOut nahi kar rahe.
-      // Session safe rahegi.
-
-      _showFirestoreError();
+      _showMessage(
+        'Unable to verify your account right now.',
+        Colors.red,
+      );
     } finally {
       _checkingAccount = false;
     }
@@ -483,10 +605,24 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
   // FIRESTORE ERROR
   // ============================================================
 
-  void _showFirestoreError() {
+  void _showFirestoreError(
+    FirebaseException error,
+  ) {
     if (!mounted) return;
 
-    showDialog(
+    String message = 'Unable to verify your account right now.\n\n'
+        'Please check your internet connection and try again.';
+
+    if (error.code == 'permission-denied') {
+      message =
+          'Account verification was blocked by Firestore security rules.\n\n'
+          'Please try again.';
+    } else if (error.code == 'unavailable') {
+      message = 'Firebase is temporarily unavailable.\n\n'
+          'Please check your internet connection and try again.';
+    }
+
+    showDialog<void>(
       context: context,
       barrierDismissible: false,
       builder: (dialogContext) {
@@ -500,16 +636,17 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
             'Connection Problem',
             textAlign: TextAlign.center,
           ),
-          content: const Text(
-            'Unable to verify your account right now.\n\n'
-            'Please check your internet connection and try again.',
+          content: Text(
+            message,
             textAlign: TextAlign.center,
           ),
           actionsAlignment: MainAxisAlignment.center,
           actions: [
             TextButton.icon(
               onPressed: () {
-                Navigator.pop(dialogContext);
+                Navigator.pop(
+                  dialogContext,
+                );
 
                 _checkLoginStatus();
               },
@@ -533,7 +670,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
   void _showUnlockRequired() {
     if (!mounted) return;
 
-    showDialog(
+    showDialog<void>(
       context: context,
       barrierDismissible: false,
       builder: (dialogContext) {
@@ -560,7 +697,9 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
 
             TextButton.icon(
               onPressed: () {
-                Navigator.pop(dialogContext);
+                Navigator.pop(
+                  dialogContext,
+                );
 
                 setState(() {
                   _showUnlockScreen = false;
@@ -582,10 +721,11 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
 
             TextButton(
               onPressed: () async {
-                Navigator.pop(dialogContext);
+                Navigator.pop(
+                  dialogContext,
+                );
 
-                // User intentionally chooses password login.
-                await FirebaseAuth.instance.signOut();
+                await _auth.signOut();
 
                 if (!mounted) return;
 
@@ -611,16 +751,18 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
   ) {
     if (!mounted) return;
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: color,
-      ),
-    );
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor: color,
+        ),
+      );
   }
 
   // ============================================================
-  // UI
+  // BUILD UI
   // ============================================================
 
   @override
@@ -634,7 +776,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
           // ======================================================
 
           Image.asset(
-            "assets/images/college_building.jpeg",
+            'assets/images/college_building.jpeg',
             fit: BoxFit.cover,
           ),
 
@@ -666,9 +808,9 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                     // ==================================================
 
                     Hero(
-                      tag: "logo",
+                      tag: 'logo',
                       child: Image.asset(
-                        "assets/images/department_logo.png",
+                        'assets/images/department_logo.png',
                         width: 170,
                       ),
                     ),
@@ -682,7 +824,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                     // ==================================================
 
                     const Text(
-                      "WELCOME TO",
+                      'WELCOME TO',
                       style: TextStyle(
                         color: Colors.amber,
                         fontSize: 18,
@@ -700,7 +842,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                     // ==================================================
 
                     const Text(
-                      "Department of\nComputer Applications",
+                      'Department of\nComputer Applications',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         color: Colors.white,
@@ -719,7 +861,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                     // ==================================================
 
                     const Text(
-                      "Salipur Autonomous College",
+                      'Salipur Autonomous College',
                       style: TextStyle(
                         color: Colors.white70,
                         fontSize: 19,
@@ -731,7 +873,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                     ),
 
                     const Text(
-                      "Salipur, Odisha",
+                      'Salipur, Odisha',
                       style: TextStyle(
                         color: Colors.white54,
                         fontSize: 15,
@@ -747,7 +889,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                     // ==================================================
 
                     const Text(
-                      "Empowering Future IT Professionals",
+                      'Empowering Future IT Professionals',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         color: Colors.white,
@@ -761,7 +903,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                     ),
 
                     // ==================================================
-                    // AUTHENTICATION ICON / LOADING
+                    // AUTHENTICATION
                     // ==================================================
 
                     if (_showUnlockScreen)
@@ -776,7 +918,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                             height: 12,
                           ),
                           const Text(
-                            "Authentication Required",
+                            'Authentication Required',
                             style: TextStyle(
                               color: Colors.white,
                               fontSize: 17,
@@ -792,7 +934,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                               Icons.fingerprint,
                             ),
                             label: const Text(
-                              "UNLOCK",
+                              'UNLOCK',
                             ),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.amber,
@@ -830,9 +972,11 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
             right: 0,
             child: Center(
               child: Text(
-                "Version 1.0",
+                'Version 1.0',
                 style: TextStyle(
-                  color: Colors.white.withValues(alpha: .7),
+                  color: Colors.white.withValues(
+                    alpha: .7,
+                  ),
                 ),
               ),
             ),

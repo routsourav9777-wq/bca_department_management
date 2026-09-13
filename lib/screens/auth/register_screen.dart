@@ -18,20 +18,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   String _semester = AppConstants.semesters[0];
 
-  final TextEditingController _nameController =
-      TextEditingController();
+  final TextEditingController _nameController = TextEditingController();
 
-  final TextEditingController _emailController =
-      TextEditingController();
+  final TextEditingController _emailController = TextEditingController();
 
-  final TextEditingController _phoneController =
-      TextEditingController();
+  final TextEditingController _phoneController = TextEditingController();
 
-  final TextEditingController _idController =
-      TextEditingController();
+  final TextEditingController _idController = TextEditingController();
 
-  final TextEditingController _passwordController =
-      TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
 
   final TextEditingController _confirmPasswordController =
       TextEditingController();
@@ -45,18 +40,27 @@ class _RegisterScreenState extends State<RegisterScreen> {
   // ============================================================
 
   Future<void> _handleRegister() async {
-    // Remove keyboard
     FocusScope.of(context).unfocus();
 
-    // ---------------- VALIDATION ----------------
+    // ============================================================
+    // GET VALUES
+    // ============================================================
 
     final String name = _nameController.text.trim();
-    final String email = _emailController.text.trim();
+
+    final String email = _emailController.text.trim().toLowerCase();
+
     final String phone = _phoneController.text.trim();
-    final String rollNo = _idController.text.trim();
+
+    final String rollNo = _idController.text.trim().toUpperCase();
+
     final String password = _passwordController.text;
-    final String confirmPassword =
-        _confirmPasswordController.text;
+
+    final String confirmPassword = _confirmPasswordController.text;
+
+    // ============================================================
+    // VALIDATION
+    // ============================================================
 
     if (name.isEmpty) {
       _showError('Please enter your Full Name');
@@ -78,8 +82,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
       return;
     }
 
-    if (phone.length < 10) {
-      _showError('Please enter a valid Phone Number');
+    if (!RegExp(r'^[0-9]{10}$').hasMatch(phone)) {
+      _showError('Please enter a valid 10 digit Phone Number');
       return;
     }
 
@@ -118,22 +122,25 @@ class _RegisterScreenState extends State<RegisterScreen> {
       _isLoading = true;
     });
 
-    UserCredential? userCredential;
-
     try {
       // ========================================================
-      // STEP 1: CREATE FIREBASE AUTH ACCOUNT
+      // STEP 1
+      // CREATE FIREBASE AUTH ACCOUNT
       // ========================================================
 
+      debugPrint('');
       debugPrint('=========================================');
-      debugPrint('STUDENT REGISTRATION STARTED');
-      debugPrint('Email: $email');
+      debugPrint('🎓 STUDENT REGISTRATION STARTED');
+      debugPrint('=========================================');
       debugPrint('Name: $name');
+      debugPrint('Email: $email');
+      debugPrint('Phone: $phone');
       debugPrint('Roll No: $rollNo');
       debugPrint('Semester: $_semester');
+      debugPrint('Department: BCA');
       debugPrint('=========================================');
 
-      userCredential =
+      final UserCredential userCredential =
           await _auth.createUserWithEmailAndPassword(
         email: email,
         password: password,
@@ -150,54 +157,91 @@ class _RegisterScreenState extends State<RegisterScreen> {
       final String studentUid = user.uid;
 
       debugPrint(
-        'Firebase Auth account created successfully.',
+        '✅ Firebase Auth account created.',
       );
 
-      debugPrint('Student UID: $studentUid');
+      debugPrint(
+        'Student UID: $studentUid',
+      );
 
       // ========================================================
-      // STEP 2: SAVE STUDENT DATA IN FIRESTORE
+      // STEP 2
+      // SAVE STUDENT DATA
       // ========================================================
 
-      await _firestore
-          .collection('students')
-          .doc(studentUid)
-          .set({
+      await _firestore.collection('students').doc(studentUid).set({
+        // ------------------------------------------------------
+        // IDENTITY
+        // ------------------------------------------------------
+
         'uid': studentUid,
+
         'name': name,
+
         'email': email,
+
         'phone': phone,
+
         'rollNo': rollNo,
+
+        // ------------------------------------------------------
+        // ACADEMIC
+        // ------------------------------------------------------
+
         'semester': _semester,
+
+        // ------------------------------------------------------
+        // SECURITY / ROLE
+        // ------------------------------------------------------
+
         'role': 'student',
 
-        // IMPORTANT:
-        // Cloud Function checks this value.
         'status': 'pending',
+
+        // ------------------------------------------------------
+        // IMPORTANT
+        // DEPARTMENT IS REQUIRED BY FIRESTORE RULES
+        // ------------------------------------------------------
+
+        'department': 'BCA',
+
+        // ------------------------------------------------------
+        // TIMESTAMP
+        // ------------------------------------------------------
 
         'createdAt': FieldValue.serverTimestamp(),
       });
 
+      debugPrint('');
+      debugPrint('=========================================');
+
       debugPrint(
-        'Student data saved successfully in Firestore.',
+        '✅ STUDENT DATA SAVED TO FIRESTORE',
       );
 
       debugPrint(
-        'Cloud Function should now trigger automatically.',
+        'Department: BCA',
       );
 
+      debugPrint(
+        'Status: pending',
+      );
+
+      debugPrint(
+        'Role: student',
+      );
+
+      debugPrint('=========================================');
+
       // ========================================================
-      // STEP 3: SIGN OUT STUDENT
+      // STEP 3
+      // SIGN OUT
       // ========================================================
-      //
-      // Student should NOT directly enter the student dashboard
-      // before HOD approval.
-      //
 
       await _auth.signOut();
 
       debugPrint(
-        'Student Firebase Auth session signed out.',
+        '✅ Student Firebase session signed out.',
       );
 
       if (!mounted) {
@@ -209,7 +253,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
       });
 
       // ========================================================
-      // STEP 4: SUCCESS MESSAGE
+      // STEP 4
+      // SUCCESS MESSAGE
       // ========================================================
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -220,18 +265,26 @@ class _RegisterScreenState extends State<RegisterScreen> {
           ),
           backgroundColor: Colors.green,
           duration: Duration(seconds: 4),
+          behavior: SnackBarBehavior.floating,
         ),
       );
 
-      // Go back to Login screen
+      // ========================================================
+      // GO BACK TO LOGIN
+      // ========================================================
+
       Navigator.pop(context);
-    } on FirebaseAuthException catch (e) {
+    }
+
+    // ==========================================================
+    // FIREBASE AUTH ERROR
+    // ==========================================================
+
+    on FirebaseAuthException catch (e) {
       debugPrint(
-        'Firebase Auth registration error: ${e.code}',
+        '❌ Firebase Auth Error: ${e.code}',
       );
 
-      // If Auth account was created but Firestore failed,
-      // sign out so the student doesn't remain logged in.
       try {
         await _auth.signOut();
       } catch (_) {}
@@ -248,47 +301,49 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
       switch (e.code) {
         case 'email-already-in-use':
-          message =
-              'This email is already registered.';
+          message = 'This email is already registered.';
           break;
 
         case 'weak-password':
-          message =
-              'Password should be at least 6 characters.';
+          message = 'Password should be at least 6 characters.';
           break;
 
         case 'invalid-email':
-          message =
-              'Please enter a valid email address.';
+          message = 'Please enter a valid email address.';
           break;
 
         case 'operation-not-allowed':
-          message =
-              'Email/Password sign-in is not enabled in Firebase.';
+          message = 'Email/Password sign-in is not enabled in Firebase.';
           break;
 
         case 'network-request-failed':
-          message =
-              'Network error. Please check your internet connection.';
+          message = 'Network error. Please check your internet connection.';
           break;
 
         case 'too-many-requests':
-          message =
-              'Too many attempts. Please try again later.';
+          message = 'Too many attempts. Please try again later.';
           break;
 
         default:
-          message =
-              e.message ?? 'Registration Failed';
+          message = e.message ?? 'Registration Failed';
       }
 
       _showError(message);
-    } on FirebaseException catch (e) {
+    }
+
+    // ==========================================================
+    // FIREBASE FIRESTORE ERROR
+    // ==========================================================
+
+    on FirebaseException catch (e) {
       debugPrint(
-        'Firebase error: ${e.code}',
+        '❌ Firestore Error: ${e.code}',
       );
 
-      // Sign out if anything failed after Auth creation.
+      debugPrint(
+        'Firestore Message: ${e.message}',
+      );
+
       try {
         await _auth.signOut();
       } catch (_) {}
@@ -301,21 +356,25 @@ class _RegisterScreenState extends State<RegisterScreen> {
         _isLoading = false;
       });
 
-      String message =
-          'Unable to complete registration.';
+      String message = 'Unable to complete registration.';
 
       if (e.code == 'permission-denied') {
-        message =
-            'Permission denied. Please contact the HOD.';
-      } else if (e.message != null &&
-          e.message!.isNotEmpty) {
+        message = 'Registration permission denied. '
+            'Please check your account information.';
+      } else if (e.message != null && e.message!.isNotEmpty) {
         message = e.message!;
       }
 
       _showError(message);
-    } catch (e) {
+    }
+
+    // ==========================================================
+    // OTHER ERROR
+    // ==========================================================
+
+    catch (e) {
       debugPrint(
-        'Registration error: $e',
+        '❌ Registration Error: $e',
       );
 
       try {
@@ -392,15 +451,20 @@ class _RegisterScreenState extends State<RegisterScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('New Registration'),
+        title: const Text(
+          'New Registration',
+        ),
       ),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(20),
           child: Column(
-            crossAxisAlignment:
-                CrossAxisAlignment.stretch,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              // ==================================================
+              // HEADER
+              // ==================================================
+
               const Text(
                 'Salipur Autonomous College - BCA Dept',
                 style: TextStyle(
@@ -410,7 +474,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 ),
               ),
 
-              const SizedBox(height: 4),
+              const SizedBox(
+                height: 4,
+              ),
 
               const Text(
                 'Please fill in the details below to register '
@@ -420,158 +486,163 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 ),
               ),
 
-              const SizedBox(height: 20),
+              const SizedBox(
+                height: 20,
+              ),
+
+              // ==================================================
+              // FORM CARD
+              // ==================================================
 
               Card(
                 child: Padding(
                   padding: const EdgeInsets.all(20),
                   child: Column(
                     children: [
-                      // ==================================================
+                      // =========================================
                       // ROLE
-                      // ==================================================
+                      // =========================================
 
                       TextFormField(
                         initialValue: 'Student',
                         readOnly: true,
-                        decoration:
-                            const InputDecoration(
+                        decoration: const InputDecoration(
                           labelText: 'I am a',
-                          prefixIcon:
-                              Icon(Icons.school),
-                          border:
-                              OutlineInputBorder(),
+                          prefixIcon: Icon(Icons.school),
+                          border: OutlineInputBorder(),
                         ),
                       ),
 
-                      const SizedBox(height: 16),
+                      const SizedBox(
+                        height: 16,
+                      ),
 
-                      // ==================================================
+                      // =========================================
+                      // DEPARTMENT
+                      // =========================================
+
+                      TextFormField(
+                        initialValue:
+                            'BCA - Department of Computer Applications',
+                        readOnly: true,
+                        decoration: const InputDecoration(
+                          labelText: 'Department',
+                          prefixIcon: Icon(Icons.computer),
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+
+                      const SizedBox(
+                        height: 16,
+                      ),
+
+                      // =========================================
                       // NAME
-                      // ==================================================
+                      // =========================================
 
                       TextField(
                         controller: _nameController,
-                        textCapitalization:
-                            TextCapitalization.words,
-                        decoration:
-                            const InputDecoration(
+                        textCapitalization: TextCapitalization.words,
+                        decoration: const InputDecoration(
                           labelText: 'Full Name',
-                          hintText:
-                              'Enter your full name',
-                          prefixIcon:
-                              Icon(
+                          hintText: 'Enter your full name',
+                          prefixIcon: Icon(
                             Icons.person_outline,
                           ),
-                          border:
-                              OutlineInputBorder(),
+                          border: OutlineInputBorder(),
                         ),
                       ),
 
-                      const SizedBox(height: 16),
+                      const SizedBox(
+                        height: 16,
+                      ),
 
-                      // ==================================================
+                      // =========================================
                       // EMAIL
-                      // ==================================================
+                      // =========================================
 
                       TextField(
                         controller: _emailController,
-                        keyboardType:
-                            TextInputType.emailAddress,
+                        keyboardType: TextInputType.emailAddress,
                         autocorrect: false,
-                        decoration:
-                            const InputDecoration(
+                        decoration: const InputDecoration(
                           labelText: 'Email Address',
-                          hintText:
-                              'Enter your email',
-                          prefixIcon:
-                              Icon(
+                          hintText: 'Enter your email',
+                          prefixIcon: Icon(
                             Icons.email_outlined,
                           ),
-                          border:
-                              OutlineInputBorder(),
+                          border: OutlineInputBorder(),
                         ),
                       ),
 
-                      const SizedBox(height: 16),
+                      const SizedBox(
+                        height: 16,
+                      ),
 
-                      // ==================================================
+                      // =========================================
                       // PHONE
-                      // ==================================================
+                      // =========================================
 
                       TextField(
                         controller: _phoneController,
-                        keyboardType:
-                            TextInputType.phone,
+                        keyboardType: TextInputType.phone,
                         maxLength: 10,
-                        decoration:
-                            const InputDecoration(
+                        decoration: const InputDecoration(
                           labelText: 'Phone Number',
-                          hintText:
-                              'Enter 10 digit phone number',
-                          prefixIcon:
-                              Icon(
+                          hintText: 'Enter 10 digit phone number',
+                          prefixIcon: Icon(
                             Icons.phone_outlined,
                           ),
-                          border:
-                              OutlineInputBorder(),
+                          border: OutlineInputBorder(),
                           counterText: '',
                         ),
                       ),
 
-                      const SizedBox(height: 16),
+                      const SizedBox(
+                        height: 16,
+                      ),
 
-                      // ==================================================
+                      // =========================================
                       // ROLL NUMBER
-                      // ==================================================
+                      // =========================================
 
                       TextField(
                         controller: _idController,
-                        textCapitalization:
-                            TextCapitalization.characters,
-                        decoration:
-                            const InputDecoration(
-                          labelText:
-                              'College Roll Number',
-                          hintText:
-                              'e.g. BS25-007',
-                          prefixIcon:
-                              Icon(
+                        textCapitalization: TextCapitalization.characters,
+                        decoration: const InputDecoration(
+                          labelText: 'College Roll Number',
+                          hintText: 'e.g. BS25-007',
+                          prefixIcon: Icon(
                             Icons.badge_outlined,
                           ),
-                          border:
-                              OutlineInputBorder(),
+                          border: OutlineInputBorder(),
                         ),
                       ),
 
-                      const SizedBox(height: 16),
+                      const SizedBox(
+                        height: 16,
+                      ),
 
-                      // ==================================================
+                      // =========================================
                       // SEMESTER
-                      // ==================================================
+                      // =========================================
 
                       DropdownButtonFormField<String>(
                         initialValue: _semester,
-                        decoration:
-                            const InputDecoration(
-                          labelText:
-                              'Current Semester',
-                          prefixIcon:
-                              Icon(
+                        decoration: const InputDecoration(
+                          labelText: 'Current Semester',
+                          prefixIcon: Icon(
                             Icons.school_outlined,
                           ),
-                          border:
-                              OutlineInputBorder(),
+                          border: OutlineInputBorder(),
                         ),
-                        items: AppConstants
-                            .semesters
+                        items: AppConstants.semesters
                             .map(
-                              (semester) =>
-                                  DropdownMenuItem<
-                                      String>(
+                              (semester) => DropdownMenuItem<String>(
                                 value: semester,
-                                child:
-                                    Text(semester),
+                                child: Text(
+                                  semester,
+                                ),
                               ),
                             )
                             .toList(),
@@ -580,146 +651,116 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             : (value) {
                                 if (value != null) {
                                   setState(() {
-                                    _semester =
-                                        value;
+                                    _semester = value;
                                   });
                                 }
                               },
                       ),
 
-                      const SizedBox(height: 16),
+                      const SizedBox(
+                        height: 16,
+                      ),
 
-                      // ==================================================
+                      // =========================================
                       // PASSWORD
-                      // ==================================================
+                      // =========================================
 
                       TextField(
-                        controller:
-                            _passwordController,
-                        obscureText:
-                            _obscurePassword,
-                        decoration:
-                            InputDecoration(
-                          labelText:
-                              'Create Password',
-                          hintText:
-                              'Minimum 6 characters',
-                          prefixIcon:
-                              const Icon(
+                        controller: _passwordController,
+                        obscureText: _obscurePassword,
+                        decoration: InputDecoration(
+                          labelText: 'Create Password',
+                          hintText: 'Minimum 6 characters',
+                          prefixIcon: const Icon(
                             Icons.lock_outline,
                           ),
-                          border:
-                              const OutlineInputBorder(),
-                          suffixIcon:
-                              IconButton(
+                          border: const OutlineInputBorder(),
+                          suffixIcon: IconButton(
                             icon: Icon(
                               _obscurePassword
-                                  ? Icons
-                                      .visibility
-                                  : Icons
-                                      .visibility_off,
+                                  ? Icons.visibility
+                                  : Icons.visibility_off,
                             ),
-                            onPressed:
-                                _isLoading
-                                    ? null
-                                    : () {
-                                        setState(() {
-                                          _obscurePassword =
-                                              !_obscurePassword;
-                                        });
-                                      },
+                            onPressed: _isLoading
+                                ? null
+                                : () {
+                                    setState(() {
+                                      _obscurePassword = !_obscurePassword;
+                                    });
+                                  },
                           ),
                         ),
                       ),
 
-                      const SizedBox(height: 16),
+                      const SizedBox(
+                        height: 16,
+                      ),
 
-                      // ==================================================
+                      // =========================================
                       // CONFIRM PASSWORD
-                      // ==================================================
+                      // =========================================
 
                       TextField(
-                        controller:
-                            _confirmPasswordController,
-                        obscureText:
-                            _obscureConfirmPassword,
+                        controller: _confirmPasswordController,
+                        obscureText: _obscureConfirmPassword,
                         onChanged: (_) {
                           setState(() {});
                         },
-                        decoration:
-                            InputDecoration(
-                          labelText:
-                              'Confirm Password',
-                          prefixIcon:
-                              const Icon(
-                            Icons
-                                .lock_reset_outlined,
+                        decoration: InputDecoration(
+                          labelText: 'Confirm Password',
+                          prefixIcon: const Icon(
+                            Icons.lock_reset_outlined,
                           ),
-                          border:
-                              const OutlineInputBorder(),
-                          suffixIcon:
-                              IconButton(
+                          border: const OutlineInputBorder(),
+                          suffixIcon: IconButton(
                             icon: Icon(
                               _obscureConfirmPassword
-                                  ? Icons
-                                      .visibility
-                                  : Icons
-                                      .visibility_off,
+                                  ? Icons.visibility
+                                  : Icons.visibility_off,
                             ),
-                            onPressed:
-                                _isLoading
-                                    ? null
-                                    : () {
-                                        setState(() {
-                                          _obscureConfirmPassword =
-                                              !_obscureConfirmPassword;
-                                        });
-                                      },
+                            onPressed: _isLoading
+                                ? null
+                                : () {
+                                    setState(() {
+                                      _obscureConfirmPassword =
+                                          !_obscureConfirmPassword;
+                                    });
+                                  },
                           ),
-                          errorText:
-                              _confirmPasswordController
-                                      .text
-                                      .isEmpty
+                          errorText: _confirmPasswordController.text.isEmpty
+                              ? null
+                              : _passwordController.text ==
+                                      _confirmPasswordController.text
                                   ? null
-                                  : _passwordController
-                                              .text ==
-                                          _confirmPasswordController
-                                              .text
-                                      ? null
-                                      : 'Passwords do not match',
+                                  : 'Passwords do not match',
                         ),
                       ),
 
-                      const SizedBox(height: 24),
+                      const SizedBox(
+                        height: 24,
+                      ),
 
-                      // ==================================================
-                      // SUBMIT BUTTON
-                      // ==================================================
+                      // =========================================
+                      // SUBMIT
+                      // =========================================
 
                       SizedBox(
                         height: 50,
                         child: ElevatedButton(
-                          onPressed:
-                              _isLoading
-                                  ? null
-                                  : _handleRegister,
+                          onPressed: _isLoading ? null : _handleRegister,
                           child: _isLoading
                               ? const SizedBox(
                                   height: 24,
                                   width: 24,
-                                  child:
-                                      CircularProgressIndicator(
+                                  child: CircularProgressIndicator(
                                     strokeWidth: 2.5,
-                                    color:
-                                        Colors.white,
+                                    color: Colors.white,
                                   ),
                                 )
                               : const Text(
                                   'SUBMIT REGISTRATION',
-                                  style:
-                                      TextStyle(
-                                    fontWeight:
-                                        FontWeight.bold,
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
                                   ),
                                 ),
                         ),
@@ -729,7 +770,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 ),
               ),
 
-              const SizedBox(height: 16),
+              const SizedBox(
+                height: 16,
+              ),
+
+              // ==================================================
+              // NOTE
+              // ==================================================
 
               const Text(
                 'Note: Your account will remain pending until '

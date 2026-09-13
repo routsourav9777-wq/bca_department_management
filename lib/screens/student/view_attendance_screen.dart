@@ -13,7 +13,6 @@ class ViewAttendanceScreen extends StatefulWidget {
 
 class _ViewAttendanceScreenState extends State<ViewAttendanceScreen> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
   bool _loading = true;
@@ -33,27 +32,11 @@ class _ViewAttendanceScreenState extends State<ViewAttendanceScreen> {
   @override
   void initState() {
     super.initState();
-
     _loadAttendance();
   }
 
   // ============================================================
   // LOAD ATTENDANCE
-  //
-  // IMPORTANT:
-  //
-  // TOTAL CLASSES:
-  // attendance_sessions
-  //
-  // PRESENT:
-  // attendance_records
-  //
-  // We DO NOT use:
-  // attendance.days
-  //
-  // Therefore:
-  // Same subject + same date + multiple classes
-  // will be counted separately.
   // ============================================================
 
   Future<void> _loadAttendance() async {
@@ -65,6 +48,10 @@ class _ViewAttendanceScreenState extends State<ViewAttendanceScreen> {
     });
 
     try {
+      // ========================================================
+      // CURRENT FIREBASE USER
+      // ========================================================
+
       final User? user = _auth.currentUser;
 
       if (user == null) {
@@ -73,46 +60,85 @@ class _ViewAttendanceScreenState extends State<ViewAttendanceScreen> {
         );
       }
 
-      // ========================================================
-      // GET STUDENT PROFILE
-      // ========================================================
+      final String studentUid = user.uid;
 
-      QuerySnapshot<Map<String, dynamic>> studentQuery = await _firestore
-          .collection('students')
-          .where(
-            'uid',
-            isEqualTo: user.uid,
-          )
-          .limit(1)
-          .get();
+      debugPrint('==========================================');
+      debugPrint('STUDENT ATTENDANCE');
+      debugPrint('Student UID: $studentUid');
+      debugPrint('==========================================');
 
       // ========================================================
-      // EMAIL FALLBACK
+      // GET STUDENT PROFILE DIRECTLY BY UID
+      //
+      // students/{uid}
+      //
+      // This matches production Firestore rules.
       // ========================================================
 
-      if (studentQuery.docs.isEmpty && user.email != null) {
-        studentQuery = await _firestore
-            .collection('students')
-            .where(
-              'email',
-              isEqualTo: user.email,
-            )
-            .limit(1)
-            .get();
-      }
+      final DocumentSnapshot<Map<String, dynamic>> studentDoc =
+          await _firestore.collection('students').doc(studentUid).get();
 
-      if (studentQuery.docs.isEmpty) {
+      if (!studentDoc.exists) {
         throw Exception(
           'Student profile not found.',
         );
       }
 
-      final Map<String, dynamic> student = studentQuery.docs.first.data();
+      final Map<String, dynamic> student = studentDoc.data() ?? {};
 
-      final String studentUid = user.uid;
+      // ========================================================
+      // CHECK STUDENT UID
+      // ========================================================
 
-      final String department =
-          student['department']?.toString().trim() ?? 'BCA';
+      final String storedUid = student['uid']?.toString().trim() ?? '';
+
+      if (storedUid.isNotEmpty && storedUid != studentUid) {
+        throw Exception(
+          'Student account verification failed.',
+        );
+      }
+
+      // ========================================================
+      // CHECK ROLE
+      // ========================================================
+
+      final String role =
+          student['role']?.toString().trim().toLowerCase() ?? '';
+
+      if (role != 'student') {
+        throw Exception(
+          'This account is not registered as a student.',
+        );
+      }
+
+      // ========================================================
+      // CHECK DEPARTMENT
+      // ========================================================
+
+      final String department = student['department']?.toString().trim() ?? '';
+
+      if (department.isEmpty) {
+        throw Exception(
+          'Student department not found.',
+        );
+      }
+
+      // ========================================================
+      // CHECK STATUS
+      // ========================================================
+
+      final String status =
+          student['status']?.toString().trim().toLowerCase() ?? '';
+
+      if (status != 'approved' && status != 'active') {
+        throw Exception(
+          'Student account is not active.',
+        );
+      }
+
+      // ========================================================
+      // SEMESTER
+      // ========================================================
 
       final String semester = student['semester']?.toString().trim() ?? '';
 
@@ -122,33 +148,102 @@ class _ViewAttendanceScreenState extends State<ViewAttendanceScreen> {
         );
       }
 
+      debugPrint('Department: $department');
+      debugPrint('Semester: $semester');
+      debugPrint('Status: $status');
+
       // ========================================================
-      // GET ALL ATTENDANCE SESSIONS
+      // GET ATTENDANCE SESSIONS
       //
-      // IMPORTANT:
-      //
-      // Every document in attendance_sessions
-      // represents ONE CLASS.
+      // Your Firestore rules allow students to read
+      // attendance_sessions.
       // ========================================================
 
       final QuerySnapshot<Map<String, dynamic>> sessionSnapshot =
+          await _firestore.collection('attendance_sessions').get();
+
+      debugPrint(
+        'Total attendance sessions: '
+        '${sessionSnapshot.docs.length}',
+      );
+
+      // ========================================================
+      // GET ONLY CURRENT STUDENT ATTENDANCE RECORDS
+      //
+      // IMPORTANT:
+      //
+      // We query using:
+      //
+      // studentUid == current user's UID
+      //
+      // This matches the Firestore security rule:
+      //
+      // allow read: if isStudent()
+      //   && resource.data.studentUid == request.auth.uid;
+      // ========================================================
+
+      final QuerySnapshot<Map<String, dynamic>> recordSnapshot =
           await _firestore
-              .collection(
-                'attendance_sessions',
+              .collection('attendance_records')
+              .where(
+                'studentUid',
+                isEqualTo: studentUid,
               )
               .get();
 
+      debugPrint(
+        'Student attendance records: '
+        '${recordSnapshot.docs.length}',
+      );
+
       // ========================================================
-      // SUBJECT DATA
+      // CREATE RECORD LOOKUP
+      //
+      // sessionId -> attendance record
+      // ========================================================
+
+      final Map<String, Map<String, dynamic>> recordMap = {};
+
+      for (final QueryDocumentSnapshot<Map<String, dynamic>> recordDoc
+          in recordSnapshot.docs) {
+        final Map<String, dynamic> record = recordDoc.data();
+
+        String sessionId = record['sessionId']?.toString().trim() ?? '';
+
+        // ------------------------------------------------------
+        // FALLBACK:
+        // If sessionId is not stored, use document ID.
+        //
+        // Expected document ID:
+        // sessionId_studentUid
+        // ------------------------------------------------------
+
+        if (sessionId.isEmpty) {
+          final String documentId = recordDoc.id;
+
+          final String suffix = '_$studentUid';
+
+          if (documentId.endsWith(suffix)) {
+            sessionId = documentId.substring(
+              0,
+              documentId.length - suffix.length,
+            );
+          }
+        }
+
+        if (sessionId.isNotEmpty) {
+          recordMap[sessionId] = record;
+        }
+      }
+
+      // ========================================================
+      // SUBJECT MAP
       // ========================================================
 
       final Map<String, Map<String, dynamic>> subjectMap = {};
 
-      int overallAttended = 0;
-      int overallTotal = 0;
-
       // ========================================================
-      // PROCESS EVERY SESSION
+      // PROCESS SESSIONS
       // ========================================================
 
       for (final QueryDocumentSnapshot<Map<String, dynamic>> sessionDoc
@@ -160,7 +255,7 @@ class _ViewAttendanceScreenState extends State<ViewAttendanceScreen> {
         // ------------------------------------------------------
 
         final String sessionId =
-            session['sessionId']?.toString() ?? sessionDoc.id;
+            session['sessionId']?.toString().trim() ?? sessionDoc.id;
 
         if (sessionId.isEmpty) {
           continue;
@@ -194,7 +289,7 @@ class _ViewAttendanceScreenState extends State<ViewAttendanceScreen> {
         }
 
         // ------------------------------------------------------
-        // SUBJECT
+        // SUBJECT ID
         // ------------------------------------------------------
 
         final String subjectId = session['subjectId']?.toString().trim() ?? '';
@@ -203,19 +298,25 @@ class _ViewAttendanceScreenState extends State<ViewAttendanceScreen> {
           continue;
         }
 
+        // ------------------------------------------------------
+        // SUBJECT NAME
+        // ------------------------------------------------------
+
         final String subjectName =
             session['subjectName']?.toString().trim() ?? 'Unknown Subject';
+
+        // ------------------------------------------------------
+        // SUBJECT CODE
+        // ------------------------------------------------------
 
         final String subjectCode =
             session['subjectCode']?.toString().trim() ?? '';
 
-        // ------------------------------------------------------
-        // CREATE SUBJECT
-        // ------------------------------------------------------
+        // ======================================================
+        // CREATE SUBJECT ENTRY
+        // ======================================================
 
-        if (!subjectMap.containsKey(
-          subjectId,
-        )) {
+        if (!subjectMap.containsKey(subjectId)) {
           subjectMap[subjectId] = {
             'code': subjectCode.isNotEmpty ? subjectCode : subjectId,
             'name': subjectName,
@@ -224,34 +325,18 @@ class _ViewAttendanceScreenState extends State<ViewAttendanceScreen> {
           };
         }
 
-        // ------------------------------------------------------
+        // ======================================================
         // ONE SESSION = ONE CLASS
-        // ------------------------------------------------------
+        // ======================================================
 
         subjectMap[subjectId]!['total'] =
             (subjectMap[subjectId]!['total'] as int) + 1;
 
-        // ------------------------------------------------------
-        // CHECK STUDENT ATTENDANCE
-        //
-        // Scanner creates:
-        //
-        // attendance_records/
-        //     sessionId_studentUid
-        //
-        // ------------------------------------------------------
+        // ======================================================
+        // CHECK PRESENT
+        // ======================================================
 
-        final String recordId = '${sessionId}_$studentUid';
-
-        final DocumentSnapshot<Map<String, dynamic>> recordSnapshot =
-            await _firestore
-                .collection(
-                  'attendance_records',
-                )
-                .doc(recordId)
-                .get();
-
-        if (recordSnapshot.exists) {
+        if (recordMap.containsKey(sessionId)) {
           subjectMap[subjectId]!['attended'] =
               (subjectMap[subjectId]!['attended'] as int) + 1;
         }
@@ -262,6 +347,9 @@ class _ViewAttendanceScreenState extends State<ViewAttendanceScreen> {
       // ========================================================
 
       final List<Map<String, dynamic>> subjects = [];
+
+      int overallAttended = 0;
+      int overallTotal = 0;
 
       for (final Map<String, dynamic> subject in subjectMap.values) {
         final int attended = subject['attended'] as int;
@@ -283,7 +371,7 @@ class _ViewAttendanceScreenState extends State<ViewAttendanceScreen> {
       }
 
       // ========================================================
-      // SORT SUBJECTS
+      // SORT
       // ========================================================
 
       subjects.sort(
@@ -298,7 +386,7 @@ class _ViewAttendanceScreenState extends State<ViewAttendanceScreen> {
       );
 
       // ========================================================
-      // OVERALL
+      // OVERALL PERCENTAGE
       // ========================================================
 
       final double overallPercentage =
@@ -308,62 +396,43 @@ class _ViewAttendanceScreenState extends State<ViewAttendanceScreen> {
       // DEBUG
       // ========================================================
 
+      debugPrint('==========================================');
+      debugPrint('APPLICABLE CLASSES: $overallTotal');
+      debugPrint('PRESENT: $overallAttended');
       debugPrint(
-        '==========================================',
+        'ABSENT: ${overallTotal - overallAttended}',
       );
+      debugPrint(
+        'PERCENTAGE: $overallPercentage',
+      );
+      debugPrint('==========================================');
 
-      debugPrint(
-        'STUDENT ATTENDANCE',
-      );
-
-      debugPrint(
-        'Student UID: $studentUid',
-      );
-
-      debugPrint(
-        'Department: $department',
-      );
-
-      debugPrint(
-        'Semester: $semester',
-      );
-
-      debugPrint(
-        'Total Sessions: ${sessionSnapshot.docs.length}',
-      );
-
-      debugPrint(
-        'Applicable Classes: $overallTotal',
-      );
-
-      debugPrint(
-        'Present: $overallAttended',
-      );
-
-      debugPrint(
-        'Absent: ${overallTotal - overallAttended}',
-      );
-
-      debugPrint(
-        'Percentage: $overallPercentage',
-      );
-
-      debugPrint(
-        '==========================================',
-      );
+      // ========================================================
+      // UPDATE UI
+      // ========================================================
 
       if (!mounted) return;
 
       setState(() {
         _subjectAttendance = subjects;
-
         _overallAttended = overallAttended;
-
         _overallTotal = overallTotal;
-
         _overallPercentage = overallPercentage;
-
         _loading = false;
+      });
+    } on FirebaseException catch (e) {
+      debugPrint(
+        'Firebase Attendance Error: '
+        '${e.code} - ${e.message}',
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        _loading = false;
+        _errorMessage = e.code == 'permission-denied'
+            ? 'You do not have permission to view your attendance.'
+            : e.message ?? 'Unable to load attendance.';
       });
     } catch (e) {
       debugPrint(
@@ -384,12 +453,10 @@ class _ViewAttendanceScreenState extends State<ViewAttendanceScreen> {
   }
 
   // ============================================================
-  // SEMESTER NORMALIZATION
+  // NORMALIZE SEMESTER
   // ============================================================
 
-  String _normalizeSemester(
-    dynamic value,
-  ) {
+  String _normalizeSemester(dynamic value) {
     return value
         .toString()
         .trim()
@@ -416,9 +483,7 @@ class _ViewAttendanceScreenState extends State<ViewAttendanceScreen> {
   // STATUS
   // ============================================================
 
-  String _getStatus(
-    double percentage,
-  ) {
+  String _getStatus(double percentage) {
     if (percentage >= 85) {
       return 'Excellent Attendance';
     }
@@ -434,9 +499,11 @@ class _ViewAttendanceScreenState extends State<ViewAttendanceScreen> {
     return 'Critical Attendance';
   }
 
-  Color _getStatusColor(
-    double percentage,
-  ) {
+  // ============================================================
+  // STATUS COLOR
+  // ============================================================
+
+  Color _getStatusColor(double percentage) {
     if (percentage >= 75) {
       return Colors.green;
     }
@@ -453,9 +520,7 @@ class _ViewAttendanceScreenState extends State<ViewAttendanceScreen> {
   // ============================================================
 
   @override
-  Widget build(
-    BuildContext context,
-  ) {
+  Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text(
@@ -487,17 +552,13 @@ class _ViewAttendanceScreenState extends State<ViewAttendanceScreen> {
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
           children: const [
-            SizedBox(
-              height: 180,
-            ),
+            SizedBox(height: 180),
             Icon(
               Icons.event_available_outlined,
               size: 70,
               color: Colors.grey,
             ),
-            SizedBox(
-              height: 16,
-            ),
+            SizedBox(height: 16),
             Center(
               child: Text(
                 'No attendance records found.',
@@ -508,9 +569,7 @@ class _ViewAttendanceScreenState extends State<ViewAttendanceScreen> {
                 ),
               ),
             ),
-            SizedBox(
-              height: 8,
-            ),
+            SizedBox(height: 8),
             Center(
               child: Text(
                 'Attendance sessions will appear here.',
@@ -532,66 +591,30 @@ class _ViewAttendanceScreenState extends State<ViewAttendanceScreen> {
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-            // ==================================================
-            // OVERALL CARD
-            // ==================================================
-
             _buildOverallCard(),
-
-            const SizedBox(
-              height: 20,
-            ),
-
-            // ==================================================
-            // SUBJECT TITLE
-            // ==================================================
-
+            const SizedBox(height: 20),
             Align(
               alignment: Alignment.centerLeft,
               child: Text(
                 'Subject-wise Attendance',
-                style: Theme.of(
-                  context,
-                ).textTheme.titleMedium?.copyWith(
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
                       fontWeight: FontWeight.bold,
                     ),
               ),
             ),
-
-            const SizedBox(
-              height: 12,
-            ),
-
-            // ==================================================
-            // SUBJECT CARDS
-            // ==================================================
-
+            const SizedBox(height: 12),
             ..._subjectAttendance.map(
-              (
-                Map<String, dynamic> sub,
-              ) {
-                return _buildSubjectCard(
-                  sub,
-                );
+              (Map<String, dynamic> sub) {
+                return _buildSubjectCard(sub);
               },
             ),
-
-            const SizedBox(
-              height: 12,
-            ),
-
-            // ==================================================
-            // INFO
-            // ==================================================
-
+            const SizedBox(height: 12),
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
                 color: Colors.blue.withValues(alpha: 0.06),
-                borderRadius: BorderRadius.circular(
-                  14,
-                ),
+                borderRadius: BorderRadius.circular(14),
               ),
               child: const Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -601,9 +624,7 @@ class _ViewAttendanceScreenState extends State<ViewAttendanceScreen> {
                     size: 20,
                     color: Colors.blue,
                   ),
-                  SizedBox(
-                    width: 10,
-                  ),
+                  SizedBox(width: 10),
                   Expanded(
                     child: Text(
                       'Every attendance session is counted as one class. Multiple classes held on the same date are counted separately.',
@@ -627,9 +648,7 @@ class _ViewAttendanceScreenState extends State<ViewAttendanceScreen> {
   // ============================================================
 
   Widget _buildOverallCard() {
-    final Color statusColor = _getStatusColor(
-      _overallPercentage,
-    );
+    final Color statusColor = _getStatusColor(_overallPercentage);
 
     return Container(
       width: double.infinity,
@@ -662,15 +681,7 @@ class _ViewAttendanceScreenState extends State<ViewAttendanceScreen> {
               fontWeight: FontWeight.w500,
             ),
           ),
-
-          const SizedBox(
-            height: 12,
-          ),
-
-          // ==================================================
-          // CIRCLE
-          // ==================================================
-
+          const SizedBox(height: 12),
           SizedBox(
             width: 150,
             height: 150,
@@ -681,10 +692,7 @@ class _ViewAttendanceScreenState extends State<ViewAttendanceScreen> {
                   width: 150,
                   height: 150,
                   child: CircularProgressIndicator(
-                    value: (_overallPercentage / 100).clamp(
-                      0.0,
-                      1.0,
-                    ),
+                    value: (_overallPercentage / 100).clamp(0.0, 1.0),
                     strokeWidth: 10,
                     backgroundColor: Colors.white.withValues(
                       alpha: 0.15,
@@ -719,26 +727,16 @@ class _ViewAttendanceScreenState extends State<ViewAttendanceScreen> {
               ],
             ),
           ),
-
-          const SizedBox(
-            height: 18,
-          ),
-
+          const SizedBox(height: 18),
           Text(
-            _getStatus(
-              _overallPercentage,
-            ),
+            _getStatus(_overallPercentage),
             style: TextStyle(
               color: statusColor,
               fontSize: 14,
               fontWeight: FontWeight.bold,
             ),
           ),
-
-          const SizedBox(
-            height: 8,
-          ),
-
+          const SizedBox(height: 8),
           Text(
             '$_overallAttended / $_overallTotal classes attended',
             style: const TextStyle(
@@ -764,29 +762,19 @@ class _ViewAttendanceScreenState extends State<ViewAttendanceScreen> {
 
     final double percentage = sub['pct'] as double;
 
-    final Color color = _getStatusColor(
-      percentage,
-    );
+    final Color color = _getStatusColor(percentage);
 
     return Card(
-      margin: const EdgeInsets.only(
-        bottom: 12,
-      ),
+      margin: const EdgeInsets.only(bottom: 12),
       elevation: 2,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(
-          18,
-        ),
+        borderRadius: BorderRadius.circular(18),
       ),
       child: Padding(
         padding: const EdgeInsets.all(17),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ==================================================
-            // SUBJECT HEADER
-            // ==================================================
-
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -807,9 +795,7 @@ class _ViewAttendanceScreenState extends State<ViewAttendanceScreen> {
                     size: 23,
                   ),
                 ),
-                const SizedBox(
-                  width: 12,
-                ),
+                const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -835,9 +821,7 @@ class _ViewAttendanceScreenState extends State<ViewAttendanceScreen> {
                     ],
                   ),
                 ),
-                const SizedBox(
-                  width: 8,
-                ),
+                const SizedBox(width: 8),
                 Text(
                   '${percentage.toStringAsFixed(1)}%',
                   style: TextStyle(
@@ -848,38 +832,17 @@ class _ViewAttendanceScreenState extends State<ViewAttendanceScreen> {
                 ),
               ],
             ),
-
-            const SizedBox(
-              height: 16,
-            ),
-
-            // ==================================================
-            // PROGRESS
-            // ==================================================
-
+            const SizedBox(height: 16),
             ClipRRect(
-              borderRadius: BorderRadius.circular(
-                10,
-              ),
+              borderRadius: BorderRadius.circular(10),
               child: LinearProgressIndicator(
-                value: (percentage / 100).clamp(
-                  0.0,
-                  1.0,
-                ),
+                value: (percentage / 100).clamp(0.0, 1.0),
                 minHeight: 9,
                 backgroundColor: Colors.grey.shade200,
                 color: color,
               ),
             ),
-
-            const SizedBox(
-              height: 12,
-            ),
-
-            // ==================================================
-            // DETAILS
-            // ==================================================
-
+            const SizedBox(height: 12),
             Row(
               children: [
                 Expanded(
@@ -926,15 +889,7 @@ class _ViewAttendanceScreenState extends State<ViewAttendanceScreen> {
                 ),
               ],
             ),
-
-            const SizedBox(
-              height: 8,
-            ),
-
-            // ==================================================
-            // ABSENT
-            // ==================================================
-
+            const SizedBox(height: 8),
             Row(
               children: [
                 const Icon(
@@ -942,9 +897,7 @@ class _ViewAttendanceScreenState extends State<ViewAttendanceScreen> {
                   size: 17,
                   color: Colors.red,
                 ),
-                const SizedBox(
-                  width: 6,
-                ),
+                const SizedBox(width: 6),
                 Text(
                   'Absent: ${total - attended}',
                   style: const TextStyle(
@@ -976,9 +929,7 @@ class _ViewAttendanceScreenState extends State<ViewAttendanceScreen> {
               size: 65,
               color: Colors.redAccent,
             ),
-            const SizedBox(
-              height: 16,
-            ),
+            const SizedBox(height: 16),
             const Text(
               'Unable to load attendance',
               textAlign: TextAlign.center,
@@ -987,9 +938,7 @@ class _ViewAttendanceScreenState extends State<ViewAttendanceScreen> {
                 fontWeight: FontWeight.bold,
               ),
             ),
-            const SizedBox(
-              height: 8,
-            ),
+            const SizedBox(height: 8),
             Text(
               _errorMessage ?? 'Something went wrong.',
               textAlign: TextAlign.center,
@@ -997,9 +946,7 @@ class _ViewAttendanceScreenState extends State<ViewAttendanceScreen> {
                 color: Colors.grey,
               ),
             ),
-            const SizedBox(
-              height: 20,
-            ),
+            const SizedBox(height: 20),
             ElevatedButton.icon(
               onPressed: _loadAttendance,
               icon: const Icon(

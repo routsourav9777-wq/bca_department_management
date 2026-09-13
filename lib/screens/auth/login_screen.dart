@@ -20,20 +20,32 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
+  // ============================================================
+  // FIREBASE
+  // ============================================================
+
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
+  // ============================================================
+  // CONTROLLERS
+  // ============================================================
+
   final TextEditingController _emailController = TextEditingController();
 
   final TextEditingController _passwordController = TextEditingController();
+
+  // ============================================================
+  // STATE
+  // ============================================================
 
   bool _isLoading = false;
 
   bool _obscurePassword = true;
 
   // ============================================================
-  // REGISTER FOR NOTIFICATIONS
+  // REGISTER NOTIFICATIONS
   // ============================================================
 
   Future<void> _registerNotifications() async {
@@ -59,7 +71,7 @@ class _LoginScreenState extends State<LoginScreen> {
       );
 
       debugPrint(
-        '✅ Notification registration process completed.',
+        '✅ Notification registration completed.',
       );
     } catch (e, stackTrace) {
       // Notification failure must NEVER block login.
@@ -78,15 +90,18 @@ class _LoginScreenState extends State<LoginScreen> {
   // ============================================================
 
   Future<void> _login() async {
-    if (_emailController.text.trim().isEmpty ||
-        _passwordController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Please enter email and password',
-          ),
-          backgroundColor: Colors.red,
-        ),
+    // ==========================================================
+    // VALIDATION
+    // ==========================================================
+
+    final String email = _emailController.text.trim().toLowerCase();
+
+    final String password = _passwordController.text;
+
+    if (email.isEmpty || password.isEmpty) {
+      _showMessage(
+        'Please enter email and password.',
+        Colors.red,
       );
 
       return;
@@ -100,14 +115,24 @@ class _LoginScreenState extends State<LoginScreen> {
       _isLoading = true;
     });
 
-    final String email = _emailController.text.trim().toLowerCase();
-
-    final String password = _passwordController.text;
-
     try {
       // ========================================================
-      // FIREBASE AUTHENTICATION
+      // 1. FIREBASE AUTHENTICATION
       // ========================================================
+
+      debugPrint('');
+      debugPrint(
+        '==========================================',
+      );
+      debugPrint(
+        '🔐 STARTING FIREBASE LOGIN',
+      );
+      debugPrint(
+        'Email: $email',
+      );
+      debugPrint(
+        '==========================================',
+      );
 
       final UserCredential credential = await _auth.signInWithEmailAndPassword(
         email: email,
@@ -122,6 +147,8 @@ class _LoginScreenState extends State<LoginScreen> {
         );
       }
 
+      final String uid = user.uid;
+
       debugPrint('');
       debugPrint(
         '==========================================',
@@ -133,38 +160,66 @@ class _LoginScreenState extends State<LoginScreen> {
         'Email: ${user.email}',
       );
       debugPrint(
-        'UID: ${user.uid}',
+        'UID: $uid',
       );
       debugPrint(
         '==========================================',
       );
 
       // ========================================================
-      // 1. CHECK HOD
+      // 2. CHECK HOD USING UID
       // ========================================================
 
-      final QuerySnapshot<Map<String, dynamic>> hodQuery = await _firestore
-          .collection('hod')
-          .where(
-            'email',
-            isEqualTo: email,
-          )
-          .limit(1)
-          .get();
+      debugPrint(
+        '🔎 Checking HOD document: hod/$uid',
+      );
 
-      if (hodQuery.docs.isNotEmpty) {
-        final Map<String, dynamic> data = hodQuery.docs.first.data();
+      final DocumentSnapshot<Map<String, dynamic>> hodDocument =
+          await _firestore.collection('hod').doc(uid).get();
 
-        final String status = data['status']?.toString().toLowerCase() ?? '';
+      if (hodDocument.exists) {
+        final Map<String, dynamic> data = hodDocument.data() ?? {};
 
-        if (status == 'active') {
+        final String role = data['role']?.toString().trim().toLowerCase() ?? '';
+
+        final String status =
+            data['status']?.toString().trim().toLowerCase() ?? '';
+
+        final String department =
+            data['department']?.toString().trim().toUpperCase() ?? '';
+
+        final String firestoreUid = data['uid']?.toString().trim() ?? '';
+
+        debugPrint('');
+        debugPrint(
+          '========== HOD DATA ==========',
+        );
+        debugPrint(
+          'Auth UID      : $uid',
+        );
+        debugPrint(
+          'Firestore UID : $firestoreUid',
+        );
+        debugPrint(
+          'Role          : $role',
+        );
+        debugPrint(
+          'Status        : $status',
+        );
+        debugPrint(
+          'Department    : $department',
+        );
+        debugPrint(
+          'Document ID   : ${hodDocument.id}',
+        );
+        debugPrint(
+          '==============================',
+        );
+
+        if (role == 'hod' && status == 'active' && department == 'BCA') {
           debugPrint(
-            '✅ HOD login authorized.',
+            '✅ HOD LOGIN AUTHORIZED',
           );
-
-          // ----------------------------------------------------
-          // REGISTER NOTIFICATION
-          // ----------------------------------------------------
 
           await _registerNotifications();
 
@@ -181,63 +236,134 @@ class _LoginScreenState extends State<LoginScreen> {
 
           return;
         }
+      } else {
+        debugPrint(
+          'ℹ️ No HOD document found for UID: $uid',
+        );
       }
 
       // ========================================================
-      // 2. CHECK STUDENT
+      // 3. CHECK STUDENT USING UID
       // ========================================================
 
-      final QuerySnapshot<Map<String, dynamic>> studentQuery = await _firestore
-          .collection('students')
-          .where(
-            'email',
-            isEqualTo: email,
-          )
-          .limit(1)
-          .get();
+      debugPrint(
+        '🔎 Checking Student document: students/$uid',
+      );
 
-      if (studentQuery.docs.isNotEmpty) {
-        final Map<String, dynamic> studentData = studentQuery.docs.first.data();
+      final DocumentSnapshot<Map<String, dynamic>> studentDocument =
+          await _firestore.collection('students').doc(uid).get();
+
+      if (studentDocument.exists) {
+        final Map<String, dynamic> studentData = studentDocument.data() ?? {};
+
+        final String role =
+            studentData['role']?.toString().trim().toLowerCase() ?? '';
 
         final String status =
-            studentData['status']?.toString().toLowerCase() ?? '';
+            studentData['status']?.toString().trim().toLowerCase() ?? '';
+
+        final String department =
+            studentData['department']?.toString().trim().toUpperCase() ?? '';
+
+        final String firestoreUid = studentData['uid']?.toString().trim() ?? '';
 
         final String semester =
             studentData['semester']?.toString().trim() ?? '';
+
+        final String name = studentData['name']?.toString().trim() ?? '';
+
+        final String rollNo = studentData['rollNo']?.toString().trim() ?? '';
 
         debugPrint('');
         debugPrint(
           '==========================================',
         );
         debugPrint(
-          '🎓 STUDENT LOGIN DATA',
+          '🎓 STUDENT FIRESTORE DATA',
         );
         debugPrint(
-          'Email: $email',
+          '==========================================',
         );
         debugPrint(
-          'Status: $status',
+          'Auth UID       : $uid',
         );
         debugPrint(
-          'Semester: $semester',
+          'Firestore UID  : $firestoreUid',
+        );
+        debugPrint(
+          'Document ID    : ${studentDocument.id}',
+        );
+        debugPrint(
+          'Name           : $name',
+        );
+        debugPrint(
+          'Roll No        : $rollNo',
+        );
+        debugPrint(
+          'Role           : $role',
+        );
+        debugPrint(
+          'Status         : $status',
+        );
+        debugPrint(
+          'Department     : $department',
+        );
+        debugPrint(
+          'Semester       : $semester',
         );
         debugPrint(
           '==========================================',
         );
 
         // ======================================================
+        // UID CHECK
+        // ======================================================
+
+        if (firestoreUid.isNotEmpty && firestoreUid != uid) {
+          debugPrint(
+            '❌ UID MISMATCH',
+          );
+
+          debugPrint(
+            'Auth UID      : $uid',
+          );
+
+          debugPrint(
+            'Firestore UID : $firestoreUid',
+          );
+
+          await _auth.signOut();
+
+          if (!mounted) {
+            return;
+          }
+
+          _showMessage(
+            'Student account UID mismatch.\n'
+            'Please contact HOD.',
+            Colors.red,
+          );
+
+          return;
+        }
+
+        // ======================================================
         // STUDENT APPROVED
         // ======================================================
 
-        if (status == 'approved') {
+        if (role == 'student' && department == 'BCA' && status == 'approved') {
           debugPrint(
-            '✅ Student login authorized.',
+            '==========================================',
+          );
+          debugPrint(
+            '✅ STUDENT LOGIN AUTHORIZED',
+          );
+          debugPrint(
+            '==========================================',
           );
 
-          // ----------------------------------------------------
-          // REGISTER FCM TOKEN + TOPICS
-          // ----------------------------------------------------
-
+          // Register FCM token.
+          // Notification failure will not block login.
           await _registerNotifications();
 
           if (!mounted) {
@@ -259,20 +385,20 @@ class _LoginScreenState extends State<LoginScreen> {
         // ======================================================
 
         if (status == 'pending') {
+          debugPrint(
+            '⚠️ STUDENT ACCOUNT PENDING',
+          );
+
           await _auth.signOut();
 
           if (!mounted) {
             return;
           }
 
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'Your registration is still pending.\n'
-                'Please wait for HOD approval.',
-              ),
-              backgroundColor: Colors.orange,
-            ),
+          _showMessage(
+            'Your registration is still pending.\n'
+            'Please wait for HOD approval.',
+            Colors.orange,
           );
 
           return;
@@ -283,54 +409,158 @@ class _LoginScreenState extends State<LoginScreen> {
         // ======================================================
 
         if (status == 'rejected') {
+          debugPrint(
+            '❌ STUDENT ACCOUNT REJECTED',
+          );
+
           await _auth.signOut();
 
           if (!mounted) {
             return;
           }
 
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'Your registration has been rejected by the HOD.',
-              ),
-              backgroundColor: Colors.red,
-            ),
+          _showMessage(
+            'Your registration has been rejected by the HOD.',
+            Colors.red,
           );
 
           return;
         }
+
+        // ======================================================
+        // STUDENT INVALID DATA
+        // ======================================================
+
+        debugPrint(
+          '❌ STUDENT DATA IS NOT VALID',
+        );
+
+        debugPrint(
+          'Required:',
+        );
+
+        debugPrint(
+          'role = student',
+        );
+
+        debugPrint(
+          'department = BCA',
+        );
+
+        debugPrint(
+          'status = approved',
+        );
+
+        await _auth.signOut();
+
+        if (!mounted) {
+          return;
+        }
+
+        _showMessage(
+          'Student account is not active.\n\n'
+          'Role: $role\n'
+          'Department: $department\n'
+          'Status: $status',
+          Colors.red,
+        );
+
+        return;
+      } else {
+        debugPrint(
+          'ℹ️ No Student document found for UID: $uid',
+        );
       }
 
       // ========================================================
-      // 3. CHECK FACULTY
+      // 4. CHECK FACULTY USING UID
       // ========================================================
 
-      final QuerySnapshot<Map<String, dynamic>> facultyQuery = await _firestore
-          .collection('faculty')
-          .where(
-            'email',
-            isEqualTo: email,
-          )
-          .limit(1)
-          .get();
+      debugPrint(
+        '🔎 Checking Faculty document: faculty/$uid',
+      );
 
-      if (facultyQuery.docs.isNotEmpty) {
-        final Map<String, dynamic> facultyData = facultyQuery.docs.first.data();
+      final DocumentSnapshot<Map<String, dynamic>> facultyDocument =
+          await _firestore.collection('faculty').doc(uid).get();
+
+      if (facultyDocument.exists) {
+        final Map<String, dynamic> facultyData = facultyDocument.data() ?? {};
+
+        final String role =
+            facultyData['role']?.toString().trim().toLowerCase() ?? '';
 
         final String status =
-            facultyData['status']?.toString().toLowerCase() ?? '';
+            facultyData['status']?.toString().trim().toLowerCase() ?? '';
 
-        final String role = facultyData['role']?.toString().toLowerCase() ?? '';
+        final String department =
+            facultyData['department']?.toString().trim().toUpperCase() ?? '';
 
-        if (status == 'active' && role == 'faculty') {
+        final String firestoreUid = facultyData['uid']?.toString().trim() ?? '';
+
+        debugPrint('');
+        debugPrint(
+          '========== FACULTY DATA ==========',
+        );
+        debugPrint(
+          'Auth UID      : $uid',
+        );
+        debugPrint(
+          'Firestore UID : $firestoreUid',
+        );
+        debugPrint(
+          'Document ID   : ${facultyDocument.id}',
+        );
+        debugPrint(
+          'Role          : $role',
+        );
+        debugPrint(
+          'Status        : $status',
+        );
+        debugPrint(
+          'Department    : $department',
+        );
+        debugPrint(
+          '==================================',
+        );
+
+        // ======================================================
+        // FACULTY UID CHECK
+        // ======================================================
+
+        if (firestoreUid.isNotEmpty && firestoreUid != uid) {
           debugPrint(
-            '✅ Faculty login authorized.',
+            '❌ FACULTY UID MISMATCH',
           );
 
-          // ----------------------------------------------------
-          // REGISTER NOTIFICATION
-          // ----------------------------------------------------
+          await _auth.signOut();
+
+          if (!mounted) {
+            return;
+          }
+
+          _showMessage(
+            'Faculty account UID mismatch.\n'
+            'Please contact HOD.',
+            Colors.red,
+          );
+
+          return;
+        }
+
+        // ======================================================
+        // FACULTY APPROVED
+        // ======================================================
+
+        if (role == 'faculty' && status == 'active' && department == 'BCA') {
+          debugPrint(
+            '==========================================',
+          );
+          debugPrint(
+            '✅ FACULTY LOGIN AUTHORIZED',
+          );
+          debugPrint(
+            '==========================================',
+          );
 
           await _registerNotifications();
 
@@ -347,11 +577,68 @@ class _LoginScreenState extends State<LoginScreen> {
 
           return;
         }
+
+        // ======================================================
+        // FACULTY INVALID DATA
+        // ======================================================
+
+        debugPrint(
+          '❌ FACULTY DATA IS NOT VALID',
+        );
+
+        await _auth.signOut();
+
+        if (!mounted) {
+          return;
+        }
+
+        _showMessage(
+          'Faculty account is not active.\n\n'
+          'Role: $role\n'
+          'Department: $department\n'
+          'Status: $status',
+          Colors.red,
+        );
+
+        return;
+      } else {
+        debugPrint(
+          'ℹ️ No Faculty document found for UID: $uid',
+        );
       }
 
       // ========================================================
-      // ACCESS DENIED
+      // 5. NOTHING FOUND
       // ========================================================
+
+      debugPrint('');
+      debugPrint(
+        '==========================================',
+      );
+      debugPrint(
+        '❌ ACCOUNT NOT AUTHORIZED',
+      );
+      debugPrint(
+        '==========================================',
+      );
+      debugPrint(
+        'UID checked: $uid',
+      );
+      debugPrint(
+        'Collections checked:',
+      );
+      debugPrint(
+        'hod/$uid',
+      );
+      debugPrint(
+        'students/$uid',
+      );
+      debugPrint(
+        'faculty/$uid',
+      );
+      debugPrint(
+        '==========================================',
+      );
 
       await _auth.signOut();
 
@@ -359,21 +646,33 @@ class _LoginScreenState extends State<LoginScreen> {
         return;
       }
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Account not authorized for this portal.',
-          ),
-          backgroundColor: Colors.red,
-        ),
+      _showMessage(
+        'Account not authorized for this portal.',
+        Colors.red,
       );
     } on FirebaseAuthException catch (e) {
+      // ========================================================
+      // FIREBASE AUTH ERROR
+      // ========================================================
+
+      debugPrint('');
       debugPrint(
-        'Firebase Auth Error: '
-        '${e.code} - ${e.message}',
+        '==========================================',
+      );
+      debugPrint(
+        '❌ FIREBASE AUTH ERROR',
+      );
+      debugPrint(
+        'Code: ${e.code}',
+      );
+      debugPrint(
+        'Message: ${e.message}',
+      );
+      debugPrint(
+        '==========================================',
       );
 
-      String message = 'Login Failed';
+      String message = 'Login failed.';
 
       if (e.code == 'user-not-found') {
         message = 'No account found with this email.';
@@ -395,28 +694,86 @@ class _LoginScreenState extends State<LoginScreen> {
         return;
       }
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(message),
-          backgroundColor: Colors.red,
-        ),
+      _showMessage(
+        message,
+        Colors.red,
       );
-    } catch (e) {
+    } on FirebaseException catch (e) {
+      // ========================================================
+      // FIRESTORE ERROR
+      // ========================================================
+
+      debugPrint('');
       debugPrint(
-        'Login error: $e',
+        '==========================================',
+      );
+      debugPrint(
+        '❌ FIRESTORE ERROR',
+      );
+      debugPrint(
+        'Code: ${e.code}',
+      );
+      debugPrint(
+        'Message: ${e.message}',
+      );
+      debugPrint(
+        '==========================================',
       );
 
       if (!mounted) {
         return;
       }
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Something went wrong: $e',
-          ),
-          backgroundColor: Colors.red,
-        ),
+      if (e.code == 'permission-denied') {
+        _showMessage(
+          'Firestore permission denied.\n'
+          'Please check your production rules.',
+          Colors.red,
+        );
+      } else if (e.code == 'unavailable') {
+        _showMessage(
+          'Firestore is temporarily unavailable.\n'
+          'Please check your internet connection.',
+          Colors.orange,
+        );
+      } else {
+        _showMessage(
+          'Unable to verify your account.\n'
+          'Firestore error: ${e.code}',
+          Colors.red,
+        );
+      }
+    } catch (e, stackTrace) {
+      // ========================================================
+      // GENERAL ERROR
+      // ========================================================
+
+      debugPrint('');
+      debugPrint(
+        '==========================================',
+      );
+      debugPrint(
+        '❌ LOGIN ERROR',
+      );
+      debugPrint(
+        '$e',
+      );
+      debugPrint(
+        '==========================================',
+      );
+
+      debugPrint(
+        stackTrace.toString(),
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      _showMessage(
+        'Something went wrong.\n'
+        'Please try again.',
+        Colors.red,
       );
     } finally {
       if (mounted) {
@@ -425,6 +782,34 @@ class _LoginScreenState extends State<LoginScreen> {
         });
       }
     }
+  }
+
+  // ============================================================
+  // SHOW MESSAGE
+  // ============================================================
+
+  void _showMessage(
+    String message,
+    Color color,
+  ) {
+    if (!mounted) {
+      return;
+    }
+
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(
+            message,
+          ),
+          backgroundColor: color,
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(
+            seconds: 4,
+          ),
+        ),
+      );
   }
 
   // ============================================================
@@ -497,9 +882,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         // ======================================
 
                         ClipRRect(
-                          borderRadius: BorderRadius.circular(
-                            15,
-                          ),
+                          borderRadius: BorderRadius.circular(15),
                           child: Image.asset(
                             'assets/images/department_logo.png',
                             width: 170,
@@ -549,6 +932,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           keyboardType: TextInputType.emailAddress,
                           textInputAction: TextInputAction.next,
                           autocorrect: false,
+                          enabled: !_isLoading,
                           decoration: const InputDecoration(
                             labelText: 'Enter your Email',
                             prefixIcon: Icon(
@@ -569,6 +953,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           controller: _passwordController,
                           obscureText: _obscurePassword,
                           textInputAction: TextInputAction.done,
+                          enabled: !_isLoading,
                           onSubmitted: (_) {
                             if (!_isLoading) {
                               _login();
@@ -585,11 +970,13 @@ class _LoginScreenState extends State<LoginScreen> {
                                     ? Icons.visibility
                                     : Icons.visibility_off,
                               ),
-                              onPressed: () {
-                                setState(() {
-                                  _obscurePassword = !_obscurePassword;
-                                });
-                              },
+                              onPressed: _isLoading
+                                  ? null
+                                  : () {
+                                      setState(() {
+                                        _obscurePassword = !_obscurePassword;
+                                      });
+                                    },
                             ),
                           ),
                         ),
@@ -648,6 +1035,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                     'SIGN IN',
                                     style: TextStyle(
                                       fontSize: 16,
+                                      fontWeight: FontWeight.bold,
                                     ),
                                   ),
                           ),
@@ -668,14 +1056,17 @@ class _LoginScreenState extends State<LoginScreen> {
                               'New Student? ',
                             ),
                             GestureDetector(
-                              onTap: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => const RegisterScreen(),
-                                  ),
-                                );
-                              },
+                              onTap: _isLoading
+                                  ? null
+                                  : () {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) =>
+                                              const RegisterScreen(),
+                                        ),
+                                      );
+                                    },
                               child: const Text(
                                 'Register Here',
                                 style: TextStyle(
