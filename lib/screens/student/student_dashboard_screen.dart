@@ -37,11 +37,14 @@ class StudentDashboardScreen extends StatefulWidget {
 class _StudentDashboardScreenState extends State<StudentDashboardScreen>
     with TickerProviderStateMixin {
   final FirebaseAuth _auth = FirebaseAuth.instance;
+
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   Map<String, dynamic>? _studentData;
 
   bool _loadingStudent = true;
+
+  String? _studentLoadError;
 
   late AnimationController _entryController;
   late AnimationController _backgroundController;
@@ -50,36 +53,36 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen>
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
 
+  // ============================================================
+  // INIT
+  // ============================================================
+
   @override
   void initState() {
     super.initState();
 
-    // ==========================================================
-    // MAIN SCREEN ANIMATION
-    // ==========================================================
-
     _entryController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 850),
+      duration: const Duration(
+        milliseconds: 850,
+      ),
     );
-
-    // ==========================================================
-    // BACKGROUND CONTINUOUSLY MOVES
-    // ==========================================================
 
     _backgroundController = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 18),
+      duration: const Duration(
+        seconds: 18,
+      ),
     )..repeat();
-
-    // ==========================================================
-    // CARDS FLOATING ANIMATION
-    // ==========================================================
 
     _floatingController = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 3),
-    )..repeat(reverse: true);
+      duration: const Duration(
+        seconds: 3,
+      ),
+    )..repeat(
+        reverse: true,
+      );
 
     _fadeAnimation = CurvedAnimation(
       parent: _entryController,
@@ -87,7 +90,10 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen>
     );
 
     _slideAnimation = Tween<Offset>(
-      begin: const Offset(0, 0.06),
+      begin: const Offset(
+        0,
+        0.06,
+      ),
       end: Offset.zero,
     ).animate(
       CurvedAnimation(
@@ -99,7 +105,9 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen>
     _loadStudent();
 
     Future.delayed(
-      const Duration(milliseconds: 150),
+      const Duration(
+        milliseconds: 150,
+      ),
       () {
         if (mounted) {
           _entryController.forward();
@@ -108,102 +116,255 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen>
     );
   }
 
+  // ============================================================
+  // DISPOSE
+  // ============================================================
+
   @override
   void dispose() {
     _entryController.dispose();
     _backgroundController.dispose();
     _floatingController.dispose();
+
     super.dispose();
   }
 
-  // ==========================================================
+  // ============================================================
   // LOAD STUDENT
-  // ==========================================================
+  // ============================================================
 
   Future<void> _loadStudent() async {
+    if (mounted) {
+      setState(() {
+        _loadingStudent = true;
+        _studentLoadError = null;
+      });
+    }
+
     try {
       final User? user = _auth.currentUser;
 
+      // ========================================================
+      // AUTH USER CHECK
+      // ========================================================
+
       if (user == null) {
+        debugPrint(
+          '❌ FirebaseAuth currentUser is NULL',
+        );
+
         if (mounted) {
           setState(() {
             _loadingStudent = false;
+            _studentLoadError = 'User is not logged in.';
           });
         }
+
         return;
       }
 
-      // --------------------------------------------------------
-      // SEARCH BY UID
-      // --------------------------------------------------------
+      final String uid = user.uid;
 
-      final QuerySnapshot<Map<String, dynamic>> uidQuery = await _firestore
-          .collection('students')
-          .where(
-            'uid',
-            isEqualTo: user.uid,
-          )
-          .limit(1)
-          .get();
+      debugPrint('');
+      debugPrint(
+        '==========================================',
+      );
+      debugPrint(
+        'STUDENT DASHBOARD - LOADING PROFILE',
+      );
+      debugPrint(
+        'Auth UID: $uid',
+      );
+      debugPrint(
+        'Auth Email: ${user.email}',
+      );
+      debugPrint(
+        'Firestore Path: students/$uid',
+      );
+      debugPrint(
+        '==========================================',
+      );
 
-      if (uidQuery.docs.isNotEmpty) {
+      // ========================================================
+      // DIRECT UID DOCUMENT READ
+      // ========================================================
+      //
+      // Firebase structure:
+      //
+      // students
+      //   └── Y1wBtEEF7dXdW39DJxf7I6x0tMC3
+      //
+      // ========================================================
+
+      final DocumentSnapshot<Map<String, dynamic>> studentDoc =
+          await _firestore.collection('students').doc(uid).get(
+                const GetOptions(
+                  source: Source.server,
+                ),
+              );
+
+      // ========================================================
+      // DOCUMENT NOT FOUND
+      // ========================================================
+
+      if (!studentDoc.exists || studentDoc.data() == null) {
+        debugPrint(
+          '❌ STUDENT DOCUMENT DOES NOT EXIST',
+        );
+
+        debugPrint(
+          'Expected path:',
+        );
+
+        debugPrint(
+          'students/$uid',
+        );
+
         if (mounted) {
           setState(() {
-            _studentData = uidQuery.docs.first.data();
+            _studentData = null;
             _loadingStudent = false;
+            _studentLoadError = 'Student profile not found.\n\n'
+                'Expected document:\n'
+                'students/$uid';
           });
         }
+
         return;
       }
 
-      // --------------------------------------------------------
-      // SEARCH BY EMAIL
-      // --------------------------------------------------------
+      // ========================================================
+      // GET DATA
+      // ========================================================
 
-      if (user.email != null) {
-        final QuerySnapshot<Map<String, dynamic>> emailQuery = await _firestore
-            .collection('students')
-            .where(
-              'email',
-              isEqualTo: user.email,
-            )
-            .limit(1)
-            .get();
+      final Map<String, dynamic> data = studentDoc.data()!;
 
-        if (emailQuery.docs.isNotEmpty) {
-          if (mounted) {
-            setState(() {
-              _studentData = emailQuery.docs.first.data();
-              _loadingStudent = false;
-            });
-          }
-          return;
-        }
+      // ========================================================
+      // DEBUG ALL DATA
+      // ========================================================
+
+      debugPrint(
+        '==========================================',
+      );
+      debugPrint(
+        '✅ STUDENT PROFILE FOUND',
+      );
+      debugPrint(
+        'Document ID: ${studentDoc.id}',
+      );
+      debugPrint(
+        'uid: ${data['uid']}',
+      );
+      debugPrint(
+        'name: ${data['name']}',
+      );
+      debugPrint(
+        'rollNo: ${data['rollNo']}',
+      );
+      debugPrint(
+        'semester: ${data['semester']}',
+      );
+      debugPrint(
+        'department: ${data['department']}',
+      );
+      debugPrint(
+        'email: ${data['email']}',
+      );
+      debugPrint(
+        'role: ${data['role']}',
+      );
+      debugPrint(
+        'status: ${data['status']}',
+      );
+      debugPrint(
+        '==========================================',
+      );
+
+      // ========================================================
+      // VALIDATE UID
+      // ========================================================
+
+      final String storedUid = (data['uid'] ?? '').toString().trim();
+
+      if (storedUid.isNotEmpty && storedUid != uid) {
+        debugPrint(
+          '⚠️ UID mismatch!',
+        );
+
+        debugPrint(
+          'Auth UID: $uid',
+        );
+
+        debugPrint(
+          'Firestore UID: $storedUid',
+        );
       }
+
+      // ========================================================
+      // SET DATA
+      // ========================================================
 
       if (mounted) {
         setState(() {
-          _studentData = null;
+          _studentData = data;
           _loadingStudent = false;
+          _studentLoadError = null;
+        });
+      }
+    } on FirebaseException catch (e) {
+      debugPrint(
+        '==========================================',
+      );
+
+      debugPrint(
+        '❌ FIREBASE ERROR',
+      );
+
+      debugPrint(
+        'Code: ${e.code}',
+      );
+
+      debugPrint(
+        'Message: ${e.message}',
+      );
+
+      debugPrint(
+        '==========================================',
+      );
+
+      if (mounted) {
+        setState(() {
+          _loadingStudent = false;
+          _studentLoadError = 'Firebase error: ${e.code}\n\n'
+              '${e.message ?? 'Unable to load profile.'}';
         });
       }
     } catch (e) {
-      debugPrint('Student load error: $e');
+      debugPrint(
+        '❌ STUDENT PROFILE ERROR: $e',
+      );
 
       if (mounted) {
         setState(() {
           _loadingStudent = false;
+          _studentLoadError = e.toString();
         });
       }
     }
   }
 
-  // ==========================================================
+  // ============================================================
   // LOGOUT
-  // ==========================================================
+  // ============================================================
 
   Future<void> _logout() async {
-    await _auth.signOut();
+    try {
+      await _auth.signOut();
+    } catch (e) {
+      debugPrint(
+        'Logout error: $e',
+      );
+    }
 
     if (!mounted) return;
 
@@ -216,9 +377,9 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen>
     );
   }
 
-  // ==========================================================
-  // OPEN SETTINGS
-  // ==========================================================
+  // ============================================================
+  // SETTINGS
+  // ============================================================
 
   void _openSettings() {
     Navigator.push(
@@ -229,30 +390,40 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen>
     );
   }
 
-  // ==========================================================
+  // ============================================================
   // STUDENT VALUE
-  // ==========================================================
+  // ============================================================
 
   String _studentValue(
-    String key,
+    List<String> keys,
     String fallback,
   ) {
-    final dynamic value = _studentData?[key];
+    final Map<String, dynamic>? data = _studentData;
 
-    if (value == null || value.toString().trim().isEmpty) {
+    if (data == null) {
       return fallback;
     }
 
-    return value.toString();
+    for (final String key in keys) {
+      final dynamic value = data[key];
+
+      if (value != null && value.toString().trim().isNotEmpty) {
+        return value.toString().trim();
+      }
+    }
+
+    return fallback;
   }
 
-  // ==========================================================
+  // ============================================================
   // NOTIFICATION STREAM
-  // ==========================================================
+  // ============================================================
 
   Stream<QuerySnapshot<Map<String, dynamic>>> _notificationStream() {
     return _firestore
-        .collection('notifications')
+        .collection(
+          'notifications',
+        )
         .where(
           'department',
           isEqualTo: 'BCA',
@@ -260,26 +431,31 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen>
         .snapshots();
   }
 
-  // ==========================================================
+  // ============================================================
   // BUILD
-  // ==========================================================
+  // ============================================================
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(
+    BuildContext context,
+  ) {
     return Scaffold(
       backgroundColor: kBackground,
       appBar: _buildAppBar(),
       body: Stack(
         children: [
-          // ====================================================
-          // ANIMATED CODING BACKGROUND
-          // ====================================================
+          // ======================================================
+          // BACKGROUND
+          // ======================================================
 
           Positioned.fill(
             child: IgnorePointer(
               child: AnimatedBuilder(
                 animation: _backgroundController,
-                builder: (context, child) {
+                builder: (
+                  context,
+                  child,
+                ) {
                   return CustomPaint(
                     painter: CodingBackgroundPainter(
                       progress: _backgroundController.value,
@@ -290,233 +466,361 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen>
             ),
           ),
 
-          // ====================================================
-          // CONTENT
-          // ====================================================
+          // ======================================================
+          // LOADING
+          // ======================================================
 
-          _loadingStudent
-              ? const Center(
-                  child: CircularProgressIndicator(
-                    color: kPrimary,
-                  ),
-                )
-              : RefreshIndicator(
-                  color: kPrimary,
-                  onRefresh: _loadStudent,
-                  child: SingleChildScrollView(
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    padding: const EdgeInsets.fromLTRB(
-                      16,
-                      12,
-                      16,
-                      30,
-                    ),
-                    child: FadeTransition(
-                      opacity: _fadeAnimation,
-                      child: SlideTransition(
-                        position: _slideAnimation,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+          if (_loadingStudent)
+            const Center(
+              child: CircularProgressIndicator(
+                color: kPrimary,
+              ),
+            )
+
+          // ======================================================
+          // ERROR
+          // ======================================================
+
+          else if (_studentLoadError != null)
+            _buildProfileError()
+
+          // ======================================================
+          // DASHBOARD
+          // ======================================================
+
+          else
+            RefreshIndicator(
+              color: kPrimary,
+              onRefresh: _loadStudent,
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.fromLTRB(
+                  16,
+                  12,
+                  16,
+                  30,
+                ),
+                child: FadeTransition(
+                  opacity: _fadeAnimation,
+                  child: SlideTransition(
+                    position: _slideAnimation,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // ======================================
+                        // STUDENT CARD
+                        // ======================================
+
+                        _buildStudentCard(),
+
+                        const SizedBox(
+                          height: 18,
+                        ),
+
+                        // ======================================
+                        // ATTENDANCE
+                        // ======================================
+
+                        _buildAttendanceCard(),
+
+                        const SizedBox(
+                          height: 18,
+                        ),
+
+                        // ======================================
+                        // TAKE ATTENDANCE
+                        // ======================================
+
+                        _buildAttendanceButton(),
+
+                        const SizedBox(
+                          height: 28,
+                        ),
+
+                        // ======================================
+                        // SERVICES
+                        // ======================================
+
+                        Row(
                           children: [
-                            _buildStudentCard(),
-
-                            const SizedBox(height: 18),
-
-                            // ==================================================
-                            // ATTENDANCE + MARKS
-                            // ==================================================
-
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: _buildAttendanceCard(),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: _buildMarksCard(),
-                                ),
-                              ],
-                            ),
-
-                            const SizedBox(height: 18),
-
-                            // ==================================================
-                            // TAKE ATTENDANCE
-                            // ==================================================
-
-                            _buildAttendanceButton(),
-
-                            const SizedBox(height: 28),
-
-                            // ==================================================
-                            // STUDENT SERVICES TITLE
-                            // ==================================================
-
-                            Row(
-                              children: [
-                                Container(
-                                  width: 5,
-                                  height: 24,
-                                  decoration: BoxDecoration(
-                                    color: kPrimary,
-                                    borderRadius: BorderRadius.circular(
-                                      10,
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 9),
-                                const Text(
-                                  'Student Services',
-                                  style: TextStyle(
-                                    color: kTextDark,
-                                    fontSize: 19,
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                                ),
-                              ],
-                            ),
-
-                            const Padding(
-                              padding: EdgeInsets.only(
-                                left: 14,
-                                top: 3,
-                              ),
-                              child: Text(
-                                'Everything you need in one place',
-                                style: TextStyle(
-                                  color: kTextGrey,
-                                  fontSize: 12,
+                            Container(
+                              width: 5,
+                              height: 24,
+                              decoration: BoxDecoration(
+                                color: kPrimary,
+                                borderRadius: BorderRadius.circular(
+                                  10,
                                 ),
                               ),
                             ),
-
-                            const SizedBox(height: 15),
-
-                            // ==================================================
-                            // SERVICES GRID
-                            // ==================================================
-
-                            GridView.count(
-                              crossAxisCount: 2,
-                              shrinkWrap: true,
-                              physics: const NeverScrollableScrollPhysics(),
-                              crossAxisSpacing: 12,
-                              mainAxisSpacing: 12,
-                              childAspectRatio: 1.08,
-                              children: [
-                                // ============================================
-                                // DOWNLOAD NOTES
-                                // ============================================
-
-                                _buildServiceCard(
-                                  title: 'Download Notes',
-                                  subtitle: 'PDF Study Materials',
-                                  icon: Icons.menu_book_rounded,
-                                  color: const Color(0xFF4F46E5),
-                                  onTap: () {
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (_) =>
-                                            const DownloadNotesScreen(),
-                                      ),
-                                    );
-                                  },
-                                ),
-
-                                // ============================================
-                                // VIEW NOTICES
-                                // ============================================
-
-                                _buildServiceCard(
-                                  title: 'View Notices',
-                                  subtitle: 'Department Updates',
-                                  icon: Icons.campaign_rounded,
-                                  color: const Color(0xFF9333EA),
-                                  onTap: () {
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (_) =>
-                                            const StudentViewNoticesScreen(),
-                                      ),
-                                    );
-                                  },
-                                ),
-
-                                // ============================================
-                                // ATTENDANCE
-                                // ============================================
-
-                                _buildServiceCard(
-                                  title: 'Attendance',
-                                  subtitle: 'Subject-wise Percentage',
-                                  icon: Icons.fact_check_rounded,
-                                  color: const Color(0xFF059669),
-                                  onTap: () {
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (_) =>
-                                            const ViewAttendanceScreen(),
-                                      ),
-                                    );
-                                  },
-                                ),
-
-                                // ============================================
-                                // NOTIFICATIONS
-                                // ============================================
-
-                                _buildServiceCard(
-                                  title: 'Notifications',
-                                  subtitle: 'Important Alerts',
-                                  icon: Icons.notifications_active_rounded,
-                                  color: const Color(0xFFDC2626),
-                                  onTap: () {
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (_) =>
-                                            const NotificationsScreen(),
-                                      ),
-                                    );
-                                  },
-                                ),
-
-                                // ============================================
-                                // SETTINGS
-                                // ============================================
-
-                                _buildServiceCard(
-                                  title: 'Settings',
-                                  subtitle: 'Account & App Settings',
-                                  icon: Icons.settings_outlined,
-                                  color: Colors.blueGrey,
-                                  onTap: _openSettings,
-                                ),
-                              ],
+                            const SizedBox(
+                              width: 9,
                             ),
-
-                            const SizedBox(height: 10),
+                            const Text(
+                              'Student Services',
+                              style: TextStyle(
+                                color: kTextDark,
+                                fontSize: 19,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
                           ],
                         ),
-                      ),
+
+                        const Padding(
+                          padding: EdgeInsets.only(
+                            left: 14,
+                            top: 3,
+                          ),
+                          child: Text(
+                            'Everything you need in one place',
+                            style: TextStyle(
+                              color: kTextGrey,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+
+                        const SizedBox(
+                          height: 15,
+                        ),
+
+                        GridView.count(
+                          crossAxisCount: 2,
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          crossAxisSpacing: 12,
+                          mainAxisSpacing: 12,
+                          childAspectRatio: 1.08,
+                          children: [
+                            // ==================================
+                            // NOTES
+                            // ==================================
+
+                            _buildServiceCard(
+                              title: 'Download Notes',
+                              subtitle: 'PDF Study Materials',
+                              icon: Icons.menu_book_rounded,
+                              color: const Color(
+                                0xFF4F46E5,
+                              ),
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => const DownloadNotesScreen(),
+                                  ),
+                                );
+                              },
+                            ),
+
+                            // ==================================
+                            // NOTICES
+                            // ==================================
+
+                            _buildServiceCard(
+                              title: 'View Notices',
+                              subtitle: 'Department Updates',
+                              icon: Icons.campaign_rounded,
+                              color: const Color(
+                                0xFF9333EA,
+                              ),
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) =>
+                                        const StudentViewNoticesScreen(),
+                                  ),
+                                );
+                              },
+                            ),
+
+                            // ==================================
+                            // ATTENDANCE
+                            // ==================================
+
+                            _buildServiceCard(
+                              title: 'Attendance',
+                              subtitle: 'Subject-wise Percentage',
+                              icon: Icons.fact_check_rounded,
+                              color: const Color(
+                                0xFF059669,
+                              ),
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) =>
+                                        const ViewAttendanceScreen(),
+                                  ),
+                                );
+                              },
+                            ),
+
+                            // ==================================
+                            // NOTIFICATIONS
+                            // ==================================
+
+                            _buildServiceCard(
+                              title: 'Notifications',
+                              subtitle: 'Important Alerts',
+                              icon: Icons.notifications_active_rounded,
+                              color: const Color(
+                                0xFFDC2626,
+                              ),
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => const NotificationsScreen(),
+                                  ),
+                                );
+                              },
+                            ),
+
+                            // ==================================
+                            // SETTINGS
+                            // ==================================
+
+                            _buildServiceCard(
+                              title: 'Settings',
+                              subtitle: 'Account & App Settings',
+                              icon: Icons.settings_outlined,
+                              color: Colors.blueGrey,
+                              onTap: _openSettings,
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
                   ),
                 ),
+              ),
+            ),
         ],
       ),
     );
   }
 
-  // ==========================================================
+  // ============================================================
+  // ERROR PROFILE
+  // ============================================================
+
+  Widget _buildProfileError() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(
+          24,
+        ),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(
+            24,
+          ),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(
+              22,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(
+                  alpha: 0.08,
+                ),
+                blurRadius: 20,
+                offset: const Offset(
+                  0,
+                  10,
+                ),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 65,
+                height: 65,
+                decoration: BoxDecoration(
+                  color: Colors.red.withValues(
+                    alpha: 0.10,
+                  ),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.person_off_rounded,
+                  color: Colors.redAccent,
+                  size: 34,
+                ),
+              ),
+              const SizedBox(
+                height: 16,
+              ),
+              const Text(
+                'Unable to Load Profile',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 19,
+                  fontWeight: FontWeight.w800,
+                  color: kTextDark,
+                ),
+              ),
+              const SizedBox(
+                height: 10,
+              ),
+              Text(
+                _studentLoadError ?? 'Unable to load student profile.',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 12,
+                  height: 1.5,
+                  color: kTextGrey,
+                ),
+              ),
+              const SizedBox(
+                height: 20,
+              ),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: _loadStudent,
+                  icon: const Icon(
+                    Icons.refresh_rounded,
+                  ),
+                  label: const Text(
+                    'Try Again',
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: kPrimary,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 14,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(
+                        14,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ============================================================
   // APP BAR
-  // ==========================================================
+  // ============================================================
 
   PreferredSizeWidget _buildAppBar() {
     return AppBar(
-      backgroundColor: Colors.white.withValues(alpha: 0.96),
+      backgroundColor: Colors.white.withValues(
+        alpha: 0.96,
+      ),
       surfaceTintColor: Colors.white,
       elevation: 0,
       scrolledUnderElevation: 0,
@@ -532,7 +836,9 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen>
               fontWeight: FontWeight.w800,
             ),
           ),
-          SizedBox(height: 2),
+          SizedBox(
+            height: 2,
+          ),
           Text(
             'BCA • Salipur Autonomous College',
             style: TextStyle(
@@ -544,10 +850,7 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen>
         ],
       ),
       actions: [
-        // ========================================================
         // SETTINGS
-        // ========================================================
-
         IconButton(
           tooltip: 'Settings',
           icon: const Icon(
@@ -558,18 +861,19 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen>
           onPressed: _openSettings,
         ),
 
-        // ========================================================
         // NOTIFICATIONS
-        // ========================================================
-
         StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
           stream: _notificationStream(),
-          builder: (context, snapshot) {
+          builder: (
+            context,
+            snapshot,
+          ) {
             final int count = snapshot.data?.docs.length ?? 0;
 
             return Stack(
               children: [
                 IconButton(
+                  tooltip: 'Notifications',
                   icon: const Icon(
                     Icons.notifications_none_rounded,
                     color: kTextDark,
@@ -623,11 +927,9 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen>
           },
         ),
 
-        // ========================================================
         // PROFILE
-        // ========================================================
-
         IconButton(
+          tooltip: 'Profile',
           icon: const Icon(
             Icons.account_circle_outlined,
             color: kTextDark,
@@ -643,15 +945,13 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen>
           },
         ),
 
-        // ========================================================
         // LOGOUT
-        // ========================================================
-
         Padding(
           padding: const EdgeInsets.only(
             right: 10,
           ),
           child: IconButton(
+            tooltip: 'Logout',
             icon: const Icon(
               Icons.logout_rounded,
               color: Colors.redAccent,
@@ -664,61 +964,91 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen>
     );
   }
 
-  // ==========================================================
+  // ============================================================
   // STUDENT CARD
-  // ==========================================================
+  // ============================================================
 
   Widget _buildStudentCard() {
     final String name = _studentValue(
-      'name',
+      [
+        'name',
+        'studentName',
+        'fullName',
+      ],
       'Student',
     );
 
-    final String roll = _studentValue(
-      'rollNo',
-      _studentValue(
+    final String rollNo = _studentValue(
+      [
+        'rollNo',
         'rollNumber',
-        'Not Available',
-      ),
+        'roll',
+      ],
+      'Roll Not Available',
     );
 
     final String semester = _studentValue(
-      'semester',
-      'Not Available',
+      [
+        'semester',
+        'sem',
+        'Semester',
+      ],
+      'Semester Not Available',
     );
 
     return AnimatedBuilder(
       animation: _floatingController,
-      builder: (context, child) {
+      builder: (
+        context,
+        child,
+      ) {
         final double y = math.sin(
               _floatingController.value * math.pi,
             ) *
             2;
 
         return Transform.translate(
-          offset: Offset(0, -y),
+          offset: Offset(
+            0,
+            -y,
+          ),
           child: child,
         );
       },
       child: Container(
         width: double.infinity,
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(
+          20,
+        ),
         decoration: BoxDecoration(
           gradient: const LinearGradient(
             colors: [
-              Color(0xFF2563EB),
-              Color(0xFF1D4ED8),
-              Color(0xFF0F2D6B),
+              Color(
+                0xFF2563EB,
+              ),
+              Color(
+                0xFF1D4ED8,
+              ),
+              Color(
+                0xFF0F2D6B,
+              ),
             ],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
-          borderRadius: BorderRadius.circular(24),
+          borderRadius: BorderRadius.circular(
+            24,
+          ),
           boxShadow: [
             BoxShadow(
-              color: kPrimary.withValues(alpha: 0.30),
+              color: kPrimary.withValues(
+                alpha: 0.30,
+              ),
               blurRadius: 25,
-              offset: const Offset(0, 12),
+              offset: const Offset(
+                0,
+                12,
+              ),
             ),
           ],
         ),
@@ -732,7 +1062,9 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen>
                 height: 160,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: Colors.white.withValues(alpha: 0.09),
+                  color: Colors.white.withValues(
+                    alpha: 0.09,
+                  ),
                 ),
               ),
             ),
@@ -744,7 +1076,9 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen>
                 height: 150,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: Colors.white.withValues(alpha: 0.06),
+                  color: Colors.white.withValues(
+                    alpha: 0.06,
+                  ),
                 ),
               ),
             ),
@@ -758,18 +1092,11 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen>
                     gradient: const LinearGradient(
                       colors: [
                         Colors.white,
-                        Color(0xFFDCE9FF),
+                        Color(
+                          0xFFDCE9FF,
+                        ),
                       ],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
                     ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.18),
-                        blurRadius: 12,
-                        offset: const Offset(0, 6),
-                      ),
-                    ],
                   ),
                   child: const Icon(
                     Icons.person_rounded,
@@ -777,7 +1104,9 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen>
                     size: 38,
                   ),
                 ),
-                const SizedBox(width: 16),
+                const SizedBox(
+                  width: 16,
+                ),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -791,7 +1120,9 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen>
                           letterSpacing: 1,
                         ),
                       ),
-                      const SizedBox(height: 4),
+                      const SizedBox(
+                        height: 4,
+                      ),
                       Text(
                         name,
                         maxLines: 1,
@@ -802,14 +1133,16 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen>
                           fontWeight: FontWeight.w800,
                         ),
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(
+                        height: 8,
+                      ),
                       Wrap(
                         spacing: 6,
                         runSpacing: 5,
                         children: [
                           _buildChip(
                             Icons.badge_outlined,
-                            'Roll $roll',
+                            rollNo,
                           ),
                           _buildChip(
                             Icons.school_outlined,
@@ -828,9 +1161,9 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen>
     );
   }
 
-  // ==========================================================
+  // ============================================================
   // CHIP
-  // ==========================================================
+  // ============================================================
 
   Widget _buildChip(
     IconData icon,
@@ -842,10 +1175,11 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen>
         vertical: 5,
       ),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: Colors.white.withValues(alpha: 0.12),
+        color: Colors.white.withValues(
+          alpha: 0.14,
+        ),
+        borderRadius: BorderRadius.circular(
+          20,
         ),
       ),
       child: Row(
@@ -856,9 +1190,13 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen>
             size: 12,
             color: Colors.white70,
           ),
-          const SizedBox(width: 4),
+          const SizedBox(
+            width: 4,
+          ),
           Text(
             text,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: const TextStyle(
               color: Colors.white,
               fontSize: 10,
@@ -870,13 +1208,17 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen>
     );
   }
 
-  // ==========================================================
+  // ============================================================
   // ATTENDANCE CARD
-  // ==========================================================
+  // ============================================================
 
   Widget _buildAttendanceCard() {
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: _attendanceSessionsStream(),
+      stream: _firestore
+          .collection(
+            'attendance_sessions',
+          )
+          .snapshots(),
       builder: (
         context,
         sessionSnapshot,
@@ -885,16 +1227,19 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen>
           return _buildStatCard(
             title: 'Attendance',
             value: '--',
-            subtitle: 'Overall',
+            subtitle: 'Loading...',
             icon: Icons.pie_chart_rounded,
-            color: const Color(0xFF059669),
-            lightColor: const Color(0xFFECFDF5),
+            color: const Color(
+              0xFF059669,
+            ),
+            lightColor: const Color(
+              0xFFECFDF5,
+            ),
             progress: 0,
           );
         }
 
-        final List<QueryDocumentSnapshot<Map<String, dynamic>>> sessions =
-            sessionSnapshot.data?.docs ?? [];
+        final sessions = sessionSnapshot.data?.docs ?? [];
 
         return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
           stream: _attendanceRecordsStream(),
@@ -907,51 +1252,49 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen>
               return _buildStatCard(
                 title: 'Attendance',
                 value: '--',
-                subtitle: 'Overall',
+                subtitle: 'Loading...',
                 icon: Icons.pie_chart_rounded,
-                color: const Color(0xFF059669),
-                lightColor: const Color(0xFFECFDF5),
+                color: const Color(
+                  0xFF059669,
+                ),
+                lightColor: const Color(
+                  0xFFECFDF5,
+                ),
                 progress: 0,
               );
             }
 
-            final List<QueryDocumentSnapshot<Map<String, dynamic>>> records =
-                recordSnapshot.data?.docs ?? [];
-
-            // --------------------------------------------------
-            // GET ATTENDANCE COUNTS
-            // --------------------------------------------------
+            final records = recordSnapshot.data?.docs ?? [];
 
             final Map<String, int> counts = _getAttendanceCounts(
               sessions: sessions,
               records: records,
             );
 
-            final int totalClasses = counts['total'] ?? 0;
+            final int total = counts['total'] ?? 0;
 
-            final int attendedClasses = counts['attended'] ?? 0;
+            final int attended = counts['attended'] ?? 0;
 
-            // --------------------------------------------------
-            // CALCULATE PERCENTAGE
-            // --------------------------------------------------
-
-            final double percentage = _calculateAttendanceFromSessions(
+            final double percentage = _calculateAttendance(
               sessions: sessions,
               records: records,
             );
 
-            final bool hasData = totalClasses > 0;
-
             return _buildStatCard(
               title: 'Attendance',
-              value: hasData ? '${percentage.toStringAsFixed(1)}%' : '--',
-              subtitle: hasData
-                  ? '$attendedClasses / $totalClasses classes'
-                  : 'Overall',
+              value: '${percentage.toStringAsFixed(1)}%',
+              subtitle: '$attended / $total classes',
               icon: Icons.pie_chart_rounded,
-              color: const Color(0xFF059669),
-              lightColor: const Color(0xFFECFDF5),
-              progress: hasData ? (percentage / 100).clamp(0.0, 1.0) : 0,
+              color: const Color(
+                0xFF059669,
+              ),
+              lightColor: const Color(
+                0xFFECFDF5,
+              ),
+              progress: (percentage / 100).clamp(
+                0.0,
+                1.0,
+              ),
             );
           },
         );
@@ -959,36 +1302,237 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen>
     );
   }
 
-  // ==========================================================
-  // MARKS CARD
-  // ==========================================================
+  // ============================================================
+  // ATTENDANCE RECORD STREAM
+  // ============================================================
 
-  Widget _buildMarksCard() {
-    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: _marksStream(),
-      builder: (context, snapshot) {
-        final double average = _calculateMarksAverage(
-          snapshot.data?.docs ?? [],
-        );
+  Stream<QuerySnapshot<Map<String, dynamic>>> _attendanceRecordsStream() {
+    final String? uid = _auth.currentUser?.uid;
 
-        final bool hasData = snapshot.hasData && snapshot.data!.docs.isNotEmpty;
+    if (uid == null || uid.isEmpty) {
+      return const Stream.empty();
+    }
 
-        return _buildStatCard(
-          title: 'Mid-Sem Marks',
-          value: hasData ? average.toStringAsFixed(1) : '--',
-          subtitle: 'Average / 20',
-          icon: Icons.star_rounded,
-          color: const Color(0xFFD97706),
-          lightColor: const Color(0xFFFFFBEB),
-          progress: hasData ? (average / 20).clamp(0.0, 1.0) : 0,
-        );
-      },
-    );
+    return _firestore
+        .collection(
+          'attendance_records',
+        )
+        .where(
+          'studentUid',
+          isEqualTo: uid,
+        )
+        .snapshots();
   }
 
-  // ==========================================================
+  // ============================================================
+  // NORMALIZE
+  // ============================================================
+
+  String _normalize(
+    dynamic value,
+  ) {
+    return (value ?? '').toString().trim().toLowerCase().replaceAll(
+          RegExp(
+            r'[\s\-_]+',
+          ),
+          '',
+        );
+  }
+
+  // ============================================================
+  // SEMESTER NORMALIZE
+  // ============================================================
+
+  String _normalizeSemester(
+    dynamic value,
+  ) {
+    return (value ?? '').toString().replaceAll(
+          RegExp(
+            r'[^0-9]',
+          ),
+          '',
+        );
+  }
+
+  // ============================================================
+  // SESSION FILTER
+  // ============================================================
+
+  bool _isSessionForStudent(
+    Map<String, dynamic> session,
+  ) {
+    final String studentDepartment = _normalize(
+      _studentData?['department'] ?? 'BCA',
+    );
+
+    final String sessionDepartment = _normalize(
+      session['department'] ?? 'BCA',
+    );
+
+    if (sessionDepartment.isNotEmpty &&
+        studentDepartment.isNotEmpty &&
+        sessionDepartment != studentDepartment) {
+      return false;
+    }
+
+    final String studentSemester = _normalizeSemester(
+      _studentData?['semester'],
+    );
+
+    final String sessionSemester = _normalizeSemester(
+      session['semester'],
+    );
+
+    if (studentSemester.isNotEmpty &&
+        sessionSemester.isNotEmpty &&
+        studentSemester != sessionSemester) {
+      return false;
+    }
+
+    return true;
+  }
+
+  // ============================================================
+  // ATTENDED SESSION IDS
+  // ============================================================
+
+  Set<String> _getAttendedSessionIds(
+    List<QueryDocumentSnapshot<Map<String, dynamic>>> records,
+  ) {
+    final Set<String> ids = <String>{};
+
+    final String uid = _auth.currentUser?.uid ?? '';
+
+    for (final record in records) {
+      final data = record.data();
+
+      final String studentUid = (data['studentUid'] ?? '').toString().trim();
+
+      if (studentUid.isNotEmpty && studentUid != uid) {
+        continue;
+      }
+
+      final String sessionId = (data['sessionId'] ?? '').toString().trim();
+
+      if (sessionId.isNotEmpty) {
+        ids.add(
+          sessionId,
+        );
+      }
+    }
+
+    return ids;
+  }
+
+  // ============================================================
+  // CALCULATE ATTENDANCE
+  // ============================================================
+
+  double _calculateAttendance({
+    required List<QueryDocumentSnapshot<Map<String, dynamic>>> sessions,
+    required List<QueryDocumentSnapshot<Map<String, dynamic>>> records,
+  }) {
+    final Set<String> attendedIds = _getAttendedSessionIds(
+      records,
+    );
+
+    int total = 0;
+
+    int attended = 0;
+
+    final Set<String> counted = <String>{};
+
+    for (final sessionDoc in sessions) {
+      final Map<String, dynamic> session = sessionDoc.data();
+
+      if (!_isSessionForStudent(
+        session,
+      )) {
+        continue;
+      }
+
+      final String sessionId =
+          (session['sessionId'] ?? sessionDoc.id).toString().trim();
+
+      if (sessionId.isEmpty ||
+          !counted.add(
+            sessionId,
+          )) {
+        continue;
+      }
+
+      total++;
+
+      if (attendedIds.contains(
+        sessionId,
+      )) {
+        attended++;
+      }
+    }
+
+    if (total == 0) {
+      return 0;
+    }
+
+    return (attended / total) * 100;
+  }
+
+  // ============================================================
+  // ATTENDANCE COUNTS
+  // ============================================================
+
+  Map<String, int> _getAttendanceCounts({
+    required List<QueryDocumentSnapshot<Map<String, dynamic>>> sessions,
+    required List<QueryDocumentSnapshot<Map<String, dynamic>>> records,
+  }) {
+    final Set<String> attendedIds = _getAttendedSessionIds(
+      records,
+    );
+
+    int total = 0;
+
+    int attended = 0;
+
+    final Set<String> counted = <String>{};
+
+    for (final sessionDoc in sessions) {
+      final Map<String, dynamic> session = sessionDoc.data();
+
+      if (!_isSessionForStudent(
+        session,
+      )) {
+        continue;
+      }
+
+      final String sessionId =
+          (session['sessionId'] ?? sessionDoc.id).toString().trim();
+
+      if (sessionId.isEmpty ||
+          !counted.add(
+            sessionId,
+          )) {
+        continue;
+      }
+
+      total++;
+
+      if (attendedIds.contains(
+        sessionId,
+      )) {
+        attended++;
+      }
+    }
+
+    return {
+      'total': total,
+      'attended': attended,
+      'absent': total - attended,
+    };
+  }
+
+  // ============================================================
   // STAT CARD
-  // ==========================================================
+  // ============================================================
 
   Widget _buildStatCard({
     required String title,
@@ -1000,18 +1544,28 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen>
     required double progress,
   }) {
     return Container(
-      padding: const EdgeInsets.all(15),
+      width: double.infinity,
+      padding: const EdgeInsets.all(
+        18,
+      ),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(19),
+        borderRadius: BorderRadius.circular(
+          20,
+        ),
         border: Border.all(
           color: Colors.grey.shade200,
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.07),
+            color: Colors.black.withValues(
+              alpha: 0.07,
+            ),
             blurRadius: 14,
-            offset: const Offset(0, 7),
+            offset: const Offset(
+              0,
+              7,
+            ),
           ),
         ],
       ),
@@ -1021,56 +1575,85 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen>
           Row(
             children: [
               Container(
-                width: 42,
-                height: 42,
+                width: 46,
+                height: 46,
                 decoration: BoxDecoration(
                   color: lightColor,
-                  borderRadius: BorderRadius.circular(13),
+                  borderRadius: BorderRadius.circular(
+                    14,
+                  ),
                 ),
                 child: Icon(
                   icon,
                   color: color,
-                  size: 22,
+                  size: 24,
                 ),
               ),
               const Spacer(),
-              Icon(
-                Icons.more_horiz_rounded,
-                color: Colors.grey.shade400,
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 9,
+                  vertical: 5,
+                ),
+                decoration: BoxDecoration(
+                  color: lightColor,
+                  borderRadius: BorderRadius.circular(
+                    20,
+                  ),
+                ),
+                child: Text(
+                  'LIVE',
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 9,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(
+            height: 14,
+          ),
           Text(
             title,
             style: const TextStyle(
               color: kTextGrey,
-              fontSize: 11,
+              fontSize: 12,
               fontWeight: FontWeight.w600,
             ),
           ),
-          const SizedBox(height: 2),
+          const SizedBox(
+            height: 2,
+          ),
           Text(
             value,
             style: TextStyle(
               color: color,
-              fontSize: 24,
+              fontSize: 28,
               fontWeight: FontWeight.w900,
             ),
+          ),
+          const SizedBox(
+            height: 2,
           ),
           Text(
             subtitle,
             style: const TextStyle(
               color: kTextGrey,
-              fontSize: 10,
+              fontSize: 11,
             ),
           ),
-          const SizedBox(height: 9),
+          const SizedBox(
+            height: 11,
+          ),
           ClipRRect(
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(
+              10,
+            ),
             child: LinearProgressIndicator(
               value: progress,
-              minHeight: 5,
+              minHeight: 6,
               backgroundColor: Colors.grey.shade200,
               valueColor: AlwaysStoppedAnimation<Color>(
                 color,
@@ -1082,14 +1665,17 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen>
     );
   }
 
-  // ==========================================================
-  // ATTENDANCE BUTTON
-  // ==========================================================
+  // ============================================================
+  // TAKE ATTENDANCE
+  // ============================================================
 
   Widget _buildAttendanceButton() {
     return AnimatedBuilder(
       animation: _floatingController,
-      builder: (context, child) {
+      builder: (
+        context,
+        child,
+      ) {
         final double scale = 1 + (_floatingController.value * 0.012);
 
         return Transform.scale(
@@ -1102,25 +1688,36 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen>
         decoration: BoxDecoration(
           gradient: const LinearGradient(
             colors: [
-              Color(0xFF10B981),
-              Color(0xFF047857),
+              Color(
+                0xFF10B981,
+              ),
+              Color(
+                0xFF047857,
+              ),
             ],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
           ),
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(
+            20,
+          ),
           boxShadow: [
             BoxShadow(
-              color: Colors.green.withValues(alpha: 0.27),
+              color: Colors.green.withValues(
+                alpha: 0.27,
+              ),
               blurRadius: 18,
-              offset: const Offset(0, 9),
+              offset: const Offset(
+                0,
+                9,
+              ),
             ),
           ],
         ),
         child: Material(
           color: Colors.transparent,
           child: InkWell(
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(
+              20,
+            ),
             onTap: () {
               Navigator.push(
                 context,
@@ -1130,15 +1727,21 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen>
               );
             },
             child: Padding(
-              padding: const EdgeInsets.all(17),
+              padding: const EdgeInsets.all(
+                17,
+              ),
               child: Row(
                 children: [
                   Container(
                     width: 57,
                     height: 57,
                     decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.16),
-                      borderRadius: BorderRadius.circular(16),
+                      color: Colors.white.withValues(
+                        alpha: 0.16,
+                      ),
+                      borderRadius: BorderRadius.circular(
+                        16,
+                      ),
                     ),
                     child: const Icon(
                       Icons.qr_code_scanner_rounded,
@@ -1146,7 +1749,9 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen>
                       size: 31,
                     ),
                   ),
-                  const SizedBox(width: 14),
+                  const SizedBox(
+                    width: 14,
+                  ),
                   const Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1159,7 +1764,9 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen>
                             fontWeight: FontWeight.w800,
                           ),
                         ),
-                        SizedBox(height: 4),
+                        SizedBox(
+                          height: 4,
+                        ),
                         Text(
                           'Scan Faculty / HOD QR Code',
                           style: TextStyle(
@@ -1174,7 +1781,9 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen>
                     width: 40,
                     height: 40,
                     decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.15),
+                      color: Colors.white.withValues(
+                        alpha: 0.15,
+                      ),
                       shape: BoxShape.circle,
                     ),
                     child: const Icon(
@@ -1191,9 +1800,9 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen>
     );
   }
 
-  // ==========================================================
+  // ============================================================
   // SERVICE CARD
-  // ==========================================================
+  // ============================================================
 
   Widget _buildServiceCard({
     required String title,
@@ -1206,7 +1815,9 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen>
       color: color,
       onTap: onTap,
       child: Padding(
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.all(
+          14,
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisAlignment: MainAxisAlignment.center,
@@ -1217,8 +1828,12 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen>
                   width: 46,
                   height: 46,
                   decoration: BoxDecoration(
-                    color: color.withValues(alpha: 0.10),
-                    borderRadius: BorderRadius.circular(14),
+                    color: color.withValues(
+                      alpha: 0.10,
+                    ),
+                    borderRadius: BorderRadius.circular(
+                      14,
+                    ),
                   ),
                   child: Icon(
                     icon,
@@ -1242,7 +1857,9 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen>
                 ),
               ],
             ),
-            const SizedBox(height: 13),
+            const SizedBox(
+              height: 13,
+            ),
             Text(
               title,
               maxLines: 1,
@@ -1253,7 +1870,9 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen>
                 fontWeight: FontWeight.w800,
               ),
             ),
-            const SizedBox(height: 4),
+            const SizedBox(
+              height: 4,
+            ),
             Text(
               subtitle,
               maxLines: 2,
@@ -1269,394 +1888,11 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen>
       ),
     );
   }
-
-  // ==========================================================
-  // ATTENDANCE SESSIONS STREAM
-  // ==========================================================
-  //
-  // TOTAL CLASSES COME FROM attendance_sessions
-  //
-  // Example:
-  //
-  // attendance_sessions = 29
-  //
-  // ==========================================================
-
-  Stream<QuerySnapshot<Map<String, dynamic>>> _attendanceSessionsStream() {
-    return _firestore.collection('attendance_sessions').snapshots();
-  }
-
-  // ==========================================================
-  // ATTENDANCE RECORDS STREAM
-  // ==========================================================
-  //
-  // PRESENT CLASSES COME FROM attendance_records
-  //
-  // ==========================================================
-
-  Stream<QuerySnapshot<Map<String, dynamic>>> _attendanceRecordsStream() {
-    final String uid = _auth.currentUser?.uid ?? '';
-
-    if (uid.isEmpty) {
-      return const Stream.empty();
-    }
-
-    return _firestore
-        .collection('attendance_records')
-        .where(
-          'studentUid',
-          isEqualTo: uid,
-        )
-        .snapshots();
-  }
-
-  // ==========================================================
-  // NORMALIZE VALUE
-  // ==========================================================
-
-  String _normalizeValue(dynamic value) {
-    return value?.toString().trim().toLowerCase().replaceAll(
-              RegExp(r'[\s\-_]+'),
-              '',
-            ) ??
-        '';
-  }
-
-  // ==========================================================
-  // CHECK SESSION FOR STUDENT
-  // ==========================================================
-  //
-  // A session is counted only if it belongs to:
-  //
-  // Student Department
-  // Student Semester
-  //
-  // ==========================================================
-
-  bool _isSessionForStudent(
-    Map<String, dynamic> session,
-  ) {
-    // --------------------------------------------------------
-    // STUDENT DEPARTMENT
-    // --------------------------------------------------------
-
-    final String studentDepartment = _normalizeValue(
-      _studentData?['department'] ?? _studentData?['dept'] ?? 'BCA',
-    );
-
-    final String sessionDepartment = _normalizeValue(
-      session['department'] ?? 'BCA',
-    );
-
-    if (sessionDepartment.isNotEmpty &&
-        studentDepartment.isNotEmpty &&
-        sessionDepartment != studentDepartment) {
-      return false;
-    }
-
-    // --------------------------------------------------------
-    // STUDENT SEMESTER
-    // --------------------------------------------------------
-
-    final String studentSemester = _normalizeValue(
-      _studentData?['semester'] ?? _studentData?['sem'] ?? '',
-    );
-
-    final String sessionSemester = _normalizeValue(
-      session['semester'] ?? session['sem'] ?? '',
-    );
-
-    if (studentSemester.isNotEmpty &&
-        sessionSemester.isNotEmpty &&
-        sessionSemester != studentSemester) {
-      return false;
-    }
-
-    return true;
-  }
-
-  // ==========================================================
-  // GET ATTENDED SESSION IDS
-  // ==========================================================
-
-  Set<String> _getAttendedSessionIds(
-    List<QueryDocumentSnapshot<Map<String, dynamic>>> records,
-  ) {
-    final Set<String> attendedSessionIds = <String>{};
-
-    final String uid = _auth.currentUser?.uid ?? '';
-
-    for (final QueryDocumentSnapshot<Map<String, dynamic>> record in records) {
-      final Map<String, dynamic> data = record.data();
-
-      final String studentUid = (data['studentUid'] ?? '').toString().trim();
-
-      // ------------------------------------------------------
-      // SAFETY CHECK
-      // ------------------------------------------------------
-
-      if (studentUid.isNotEmpty && studentUid != uid) {
-        continue;
-      }
-
-      // ------------------------------------------------------
-      // SESSION ID FIELD
-      // ------------------------------------------------------
-
-      final String sessionId = (data['sessionId'] ?? '').toString().trim();
-
-      if (sessionId.isNotEmpty) {
-        attendedSessionIds.add(sessionId);
-      }
-
-      // ------------------------------------------------------
-      // DOCUMENT ID FALLBACK
-      // ------------------------------------------------------
-      //
-      // Scanner creates:
-      //
-      // ${sessionId}_${studentUid}
-      //
-      // ------------------------------------------------------
-
-      if (sessionId.isEmpty && uid.isNotEmpty) {
-        final String suffix = '_$uid';
-
-        if (record.id.endsWith(suffix)) {
-          final String extractedSessionId = record.id
-              .substring(
-                0,
-                record.id.length - suffix.length,
-              )
-              .trim();
-
-          if (extractedSessionId.isNotEmpty) {
-            attendedSessionIds.add(
-              extractedSessionId,
-            );
-          }
-        }
-      }
-    }
-
-    return attendedSessionIds;
-  }
-
-  // ==========================================================
-  // ATTENDANCE CALCULATION
-  // ==========================================================
-  //
-  // TOTAL = attendance_sessions
-  //
-  // PRESENT = attendance_records
-  //
-  // Example:
-  //
-  // Total     = 29
-  // Attended  = 6
-  //
-  // 6 / 29 × 100
-  //
-  // = 20.7%
-  //
-  // ==========================================================
-
-  double _calculateAttendanceFromSessions({
-    required List<QueryDocumentSnapshot<Map<String, dynamic>>> sessions,
-    required List<QueryDocumentSnapshot<Map<String, dynamic>>> records,
-  }) {
-    if (sessions.isEmpty) {
-      return 0;
-    }
-
-    final Set<String> attendedSessionIds = _getAttendedSessionIds(records);
-
-    int totalClasses = 0;
-    int attendedClasses = 0;
-
-    final Set<String> countedSessionIds = <String>{};
-
-    // --------------------------------------------------------
-    // LOOP THROUGH ALL ATTENDANCE SESSIONS
-    // --------------------------------------------------------
-
-    for (final QueryDocumentSnapshot<Map<String, dynamic>> sessionDoc
-        in sessions) {
-      final Map<String, dynamic> session = sessionDoc.data();
-
-      // ------------------------------------------------------
-      // FILTER BY STUDENT DEPARTMENT + SEMESTER
-      // ------------------------------------------------------
-
-      if (!_isSessionForStudent(session)) {
-        continue;
-      }
-
-      // ------------------------------------------------------
-      // GET SESSION ID
-      // ------------------------------------------------------
-
-      final String sessionId =
-          (session['sessionId'] ?? sessionDoc.id).toString().trim();
-
-      if (sessionId.isEmpty) {
-        continue;
-      }
-
-      // ------------------------------------------------------
-      // PREVENT DUPLICATE SESSION COUNT
-      // ------------------------------------------------------
-
-      if (!countedSessionIds.add(
-        sessionId,
-      )) {
-        continue;
-      }
-
-      // ------------------------------------------------------
-      // TOTAL CLASS +1
-      // ------------------------------------------------------
-
-      totalClasses++;
-
-      // ------------------------------------------------------
-      // STUDENT ATTENDED THIS SESSION?
-      // ------------------------------------------------------
-
-      if (attendedSessionIds.contains(
-        sessionId,
-      )) {
-        attendedClasses++;
-      }
-    }
-
-    // --------------------------------------------------------
-    // NO CLASSES
-    // --------------------------------------------------------
-
-    if (totalClasses == 0) {
-      return 0;
-    }
-
-    // --------------------------------------------------------
-    // FINAL PERCENTAGE
-    // --------------------------------------------------------
-
-    return (attendedClasses / totalClasses) * 100;
-  }
-
-  // ==========================================================
-  // ATTENDANCE COUNTS
-  // ==========================================================
-
-  Map<String, int> _getAttendanceCounts({
-    required List<QueryDocumentSnapshot<Map<String, dynamic>>> sessions,
-    required List<QueryDocumentSnapshot<Map<String, dynamic>>> records,
-  }) {
-    final Set<String> attendedSessionIds = _getAttendedSessionIds(records);
-
-    int totalClasses = 0;
-    int attendedClasses = 0;
-
-    final Set<String> countedSessionIds = <String>{};
-
-    // --------------------------------------------------------
-    // COUNT SESSIONS
-    // --------------------------------------------------------
-
-    for (final QueryDocumentSnapshot<Map<String, dynamic>> sessionDoc
-        in sessions) {
-      final Map<String, dynamic> session = sessionDoc.data();
-
-      if (!_isSessionForStudent(session)) {
-        continue;
-      }
-
-      final String sessionId =
-          (session['sessionId'] ?? sessionDoc.id).toString().trim();
-
-      if (sessionId.isEmpty) {
-        continue;
-      }
-
-      if (!countedSessionIds.add(
-        sessionId,
-      )) {
-        continue;
-      }
-
-      totalClasses++;
-
-      if (attendedSessionIds.contains(
-        sessionId,
-      )) {
-        attendedClasses++;
-      }
-    }
-
-    return <String, int>{
-      'total': totalClasses,
-      'attended': attendedClasses,
-      'absent': totalClasses - attendedClasses,
-    };
-  }
-
-  // ==========================================================
-  // MARKS STREAM
-  // ==========================================================
-
-  Stream<QuerySnapshot<Map<String, dynamic>>> _marksStream() {
-    final String uid = _auth.currentUser?.uid ?? '';
-
-    return _firestore
-        .collection('internal_marks')
-        .where(
-          'studentUid',
-          isEqualTo: uid,
-        )
-        .snapshots();
-  }
-
-  // ==========================================================
-  // MARKS CALCULATION
-  // ==========================================================
-
-  double _calculateMarksAverage(
-    List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
-  ) {
-    if (docs.isEmpty) {
-      return 0;
-    }
-
-    double totalObtained = 0;
-    double totalMax = 0;
-
-    for (final QueryDocumentSnapshot<Map<String, dynamic>> doc in docs) {
-      final Map<String, dynamic> data = doc.data();
-
-      final dynamic obtained =
-          data['obtained'] ?? data['marks'] ?? data['obtainedMarks'];
-
-      final dynamic max = data['max'] ?? data['maxMarks'] ?? 20;
-
-      if (obtained is num && max is num) {
-        totalObtained += obtained.toDouble();
-
-        totalMax += max.toDouble();
-      }
-    }
-
-    if (totalMax == 0) {
-      return 0;
-    }
-
-    return (totalObtained / totalMax) * 20;
-  }
 }
 
-// =================================================================
-// 3D PRESSABLE CARD
-// =================================================================
+// ============================================================
+// PRESSABLE CARD
+// ============================================================
 
 class Pressable3DCard extends StatefulWidget {
   final Widget child;
@@ -1698,7 +1934,9 @@ class _Pressable3DCardState extends State<Pressable3DCard> {
         });
       },
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 130),
+        duration: const Duration(
+          milliseconds: 130,
+        ),
         curve: Curves.easeOut,
         transform: Matrix4.identity()
           ..translate(
@@ -1711,7 +1949,9 @@ class _Pressable3DCardState extends State<Pressable3DCard> {
         transformAlignment: Alignment.center,
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(
+            18,
+          ),
           border: Border.all(
             color: Colors.grey.shade200,
           ),
@@ -1726,13 +1966,6 @@ class _Pressable3DCardState extends State<Pressable3DCard> {
                 _pressed ? 2 : 7,
               ),
             ),
-            BoxShadow(
-              color: widget.color.withValues(
-                alpha: 0.04,
-              ),
-              blurRadius: 5,
-              offset: const Offset(0, 1),
-            ),
           ],
         ),
         child: widget.child,
@@ -1741,9 +1974,9 @@ class _Pressable3DCardState extends State<Pressable3DCard> {
   }
 }
 
-// =================================================================
-// ANIMATED CODING BACKGROUND
-// =================================================================
+// ============================================================
+// BACKGROUND PAINTER
+// ============================================================
 
 class CodingBackgroundPainter extends CustomPainter {
   final double progress;
@@ -1786,12 +2019,10 @@ class CodingBackgroundPainter extends CustomPainter {
     Canvas canvas,
     Size size,
   ) {
-    // ==========================================================
-    // STRONGER BLUE GLOW
-    // ==========================================================
-
     final Paint glowPaint = Paint()
-      ..color = kPrimary.withValues(alpha: 0.075)
+      ..color = kPrimary.withValues(
+        alpha: 0.075,
+      )
       ..maskFilter = const MaskFilter.blur(
         BlurStyle.normal,
         30,
@@ -1824,9 +2055,9 @@ class CodingBackgroundPainter extends CustomPainter {
       glowPaint,
     );
 
-    // ==========================================================
-    // CODE SYMBOLS
-    // ==========================================================
+    // ========================================================
+    // SYMBOLS
+    // ========================================================
 
     for (int i = 0; i < symbols.length; i++) {
       final String symbol = symbols[i];
@@ -1862,7 +2093,6 @@ class CodingBackgroundPainter extends CustomPainter {
             ),
             fontSize: fontSize,
             fontWeight: FontWeight.w700,
-            letterSpacing: 0.5,
           ),
         ),
         textDirection: TextDirection.ltr,
@@ -1874,10 +2104,6 @@ class CodingBackgroundPainter extends CustomPainter {
         x * size.width - textPainter.width / 2,
         y * size.height,
       );
-
-      // ========================================================
-      // 3D ROTATION
-      // ========================================================
 
       canvas.save();
 
@@ -1906,9 +2132,9 @@ class CodingBackgroundPainter extends CustomPainter {
       canvas.restore();
     }
 
-    // ==========================================================
-    // MOVING DOTS
-    // ==========================================================
+    // ========================================================
+    // DOTS
+    // ========================================================
 
     final Paint dotPaint = Paint()
       ..color = kPrimary.withValues(
@@ -1936,9 +2162,9 @@ class CodingBackgroundPainter extends CustomPainter {
       );
     }
 
-    // ==========================================================
-    // SMALL GRID / CODE LINES
-    // ==========================================================
+    // ========================================================
+    // GRID
+    // ========================================================
 
     final Paint linePaint = Paint()
       ..color = kPrimary.withValues(
@@ -1950,7 +2176,10 @@ class CodingBackgroundPainter extends CustomPainter {
       final double y = ((i * 91) % 100) / 100 * size.height;
 
       canvas.drawLine(
-        Offset(0, y),
+        Offset(
+          0,
+          y,
+        ),
         Offset(
           size.width,
           y,

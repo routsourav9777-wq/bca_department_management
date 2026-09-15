@@ -1,9 +1,9 @@
-import 'dart:async';
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:local_auth/local_auth.dart';
+
+import '../../services/update.dart';
 
 import '../auth/login_screen.dart';
 import '../hod/hod_dashboard_screen.dart';
@@ -11,15 +11,15 @@ import '../faculty/faculty_dashboard_screen.dart';
 import '../student/student_dashboard_screen.dart';
 
 class WelcomeScreen extends StatefulWidget {
-  const WelcomeScreen({super.key});
+  const WelcomeScreen({
+    super.key,
+  });
 
   @override
   State<WelcomeScreen> createState() => _WelcomeScreenState();
 }
 
 class _WelcomeScreenState extends State<WelcomeScreen> {
-  Timer? _timer;
-
   // ============================================================
   // FIREBASE
   // ============================================================
@@ -40,6 +40,8 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
 
   bool _showUnlockScreen = false;
 
+  bool _appStarting = true;
+
   // ============================================================
   // INIT
   // ============================================================
@@ -48,20 +50,76 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
   void initState() {
     super.initState();
 
-    _timer = Timer(
-      const Duration(seconds: 3),
-      _checkLoginStatus,
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) {
+        _startApp();
+      },
     );
   }
 
   // ============================================================
-  // DISPOSE
+  // START APP
   // ============================================================
 
-  @override
-  void dispose() {
-    _timer?.cancel();
-    super.dispose();
+  Future<void> _startApp() async {
+    if (!mounted) return;
+
+    debugPrint('');
+    debugPrint(
+      '==========================================',
+    );
+    debugPrint(
+      '🚀 SAC BCA APP STARTING',
+    );
+    debugPrint(
+      '==========================================',
+    );
+
+    // ==========================================================
+    // FIRST: CHECK APP UPDATE
+    // ==========================================================
+
+    final bool updateFound =
+        await AppUpdateService.instance.checkForUpdateAutomatically(
+      context,
+    );
+
+    if (!mounted) return;
+
+    // ==========================================================
+    // IMPORTANT
+    // ==========================================================
+    //
+    // If update dialog was shown, we don't start biometric
+    // underneath the update dialog.
+    //
+    // ==========================================================
+
+    if (updateFound) {
+      debugPrint(
+        'ℹ️ Update dialog shown.',
+      );
+
+      setState(() {
+        _appStarting = false;
+      });
+
+      return;
+    }
+
+    // ==========================================================
+    // NO UPDATE
+    // ==========================================================
+
+    debugPrint(
+      '✅ No update required.',
+    );
+
+    setState(() {
+      _appStarting = false;
+    });
+
+    await _checkLoginStatus();
   }
 
   // ============================================================
@@ -180,11 +238,13 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
       final bool canCheckBiometrics = await _localAuth.canCheckBiometrics;
 
       debugPrint(
-        'Device supported: $isDeviceSupported',
+        'Device supported: '
+        '$isDeviceSupported',
       );
 
       debugPrint(
-        'Can check biometrics: $canCheckBiometrics',
+        'Can check biometrics: '
+        '$canCheckBiometrics',
       );
 
       // ========================================================
@@ -196,13 +256,11 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
           'Device authentication not supported.',
         );
 
-        // Device authentication unavailable.
-        // Allow the app to continue.
         return true;
       }
 
       // ========================================================
-      // REAL DEVICE AUTHENTICATION
+      // AUTHENTICATE
       // ========================================================
 
       final bool authenticated = await _localAuth.authenticate(
@@ -216,7 +274,8 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
       );
 
       debugPrint(
-        'Phone authentication result: $authenticated',
+        'Phone authentication result: '
+        '$authenticated',
       );
 
       return authenticated;
@@ -238,7 +297,9 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
   Future<void> _openCorrectDashboard(
     User user,
   ) async {
-    if (_checkingAccount) return;
+    if (_checkingAccount) {
+      return;
+    }
 
     _checkingAccount = true;
 
@@ -265,11 +326,11 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
       );
 
       // ========================================================
-      // 1. CHECK HOD USING UID
+      // 1. HOD
       // ========================================================
 
       debugPrint(
-        'Checking HOD/$uid ...',
+        'Checking hod/$uid ...',
       );
 
       final DocumentSnapshot<Map<String, dynamic>> hodDocument =
@@ -326,7 +387,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
       }
 
       // ========================================================
-      // 2. CHECK FACULTY USING UID
+      // 2. FACULTY
       // ========================================================
 
       debugPrint(
@@ -387,7 +448,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
       }
 
       // ========================================================
-      // 3. CHECK STUDENT USING UID
+      // 3. STUDENT
       // ========================================================
 
       debugPrint(
@@ -410,6 +471,8 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
 
         final String semester = data['semester']?.toString().trim() ?? '';
 
+        final String rollNo = data['rollNo']?.toString().trim() ?? '';
+
         debugPrint('');
         debugPrint(
           '========== STUDENT DATA ==========',
@@ -427,11 +490,14 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
           'Semester: $semester',
         );
         debugPrint(
+          'Roll No: $rollNo',
+        );
+        debugPrint(
           '==================================',
         );
 
         // ======================================================
-        // STUDENT APPROVED
+        // APPROVED
         // ======================================================
 
         if (role == 'student' && department == 'BCA' && status == 'approved') {
@@ -452,7 +518,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
         }
 
         // ======================================================
-        // STUDENT PENDING
+        // PENDING
         // ======================================================
 
         if (status == 'pending') {
@@ -476,8 +542,8 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
         }
 
         // ======================================================
-        // STUDENT REJECTED
-        // ======================================================
+        // REJECTED
+        // ========================================================
 
         if (status == 'rejected') {
           debugPrint(
@@ -499,7 +565,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
         }
 
         // ======================================================
-        // INVALID STUDENT STATUS
+        // INVALID
         // ======================================================
 
         await _auth.signOut();
@@ -540,10 +606,6 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
 
       _openLogin();
     } on FirebaseException catch (e) {
-      // ========================================================
-      // FIREBASE / FIRESTORE ERROR
-      // ========================================================
-
       debugPrint('');
       debugPrint(
         '==========================================',
@@ -567,10 +629,6 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
         e,
       );
     } catch (e) {
-      // ========================================================
-      // OTHER ERROR
-      // ========================================================
-
       debugPrint(
         'Account verification error: $e',
       );
@@ -616,7 +674,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
     if (error.code == 'permission-denied') {
       message =
           'Account verification was blocked by Firestore security rules.\n\n'
-          'Please try again.';
+          'Please check your account and try again.';
     } else if (error.code == 'unavailable') {
       message = 'Firebase is temporarily unavailable.\n\n'
           'Please check your internet connection and try again.';
@@ -664,7 +722,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
   }
 
   // ============================================================
-  // AUTHENTICATION REQUIRED
+  // UNLOCK DIALOG
   // ============================================================
 
   void _showUnlockRequired() {
@@ -691,10 +749,6 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
           ),
           actionsAlignment: MainAxisAlignment.center,
           actions: [
-            // ==================================================
-            // TRY AGAIN
-            // ==================================================
-
             TextButton.icon(
               onPressed: () {
                 Navigator.pop(
@@ -714,11 +768,6 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                 'TRY AGAIN',
               ),
             ),
-
-            // ==================================================
-            // LOGIN WITH PASSWORD
-            // ==================================================
-
             TextButton(
               onPressed: () async {
                 Navigator.pop(
@@ -762,11 +811,13 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
   }
 
   // ============================================================
-  // BUILD UI
+  // BUILD
   // ============================================================
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(
+    BuildContext context,
+  ) {
     return Scaffold(
       body: Stack(
         fit: StackFit.expand,
@@ -803,9 +854,9 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    // ==================================================
+                    // ==========================================
                     // LOGO
-                    // ==================================================
+                    // ==========================================
 
                     Hero(
                       tag: 'logo',
@@ -819,9 +870,9 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                       height: 35,
                     ),
 
-                    // ==================================================
+                    // ==========================================
                     // WELCOME
-                    // ==================================================
+                    // ==========================================
 
                     const Text(
                       'WELCOME TO',
@@ -837,9 +888,9 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                       height: 20,
                     ),
 
-                    // ==================================================
+                    // ==========================================
                     // DEPARTMENT
-                    // ==================================================
+                    // ==========================================
 
                     const Text(
                       'Department of\nComputer Applications',
@@ -856,9 +907,9 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                       height: 20,
                     ),
 
-                    // ==================================================
+                    // ==========================================
                     // COLLEGE
-                    // ==================================================
+                    // ==========================================
 
                     const Text(
                       'Salipur Autonomous College',
@@ -884,9 +935,9 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                       height: 40,
                     ),
 
-                    // ==================================================
+                    // ==========================================
                     // TAGLINE
-                    // ==================================================
+                    // ==========================================
 
                     const Text(
                       'Empowering Future IT Professionals',
@@ -902,9 +953,9 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                       height: 50,
                     ),
 
-                    // ==================================================
+                    // ==========================================
                     // AUTHENTICATION
-                    // ==================================================
+                    // ==========================================
 
                     if (_showUnlockScreen)
                       Column(
@@ -962,21 +1013,19 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
             ),
           ),
 
-          // ========================================================
+          // ======================================================
           // VERSION
-          // ========================================================
+          // ======================================================
 
           Positioned(
             bottom: 20,
             left: 0,
             right: 0,
             child: Center(
-              child: Text(
+              child: const Text(
                 'Version 1.0',
                 style: TextStyle(
-                  color: Colors.white.withValues(
-                    alpha: .7,
-                  ),
+                  color: Colors.white70,
                 ),
               ),
             ),

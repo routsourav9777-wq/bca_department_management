@@ -7,8 +7,6 @@ import 'package:open_filex/open_filex.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
 
-import '../main.dart';
-
 class AppUpdateService {
   AppUpdateService._();
 
@@ -19,8 +17,7 @@ class AppUpdateService {
   // GITHUB CONFIGURATION
   // ============================================================
 
-  static const String githubOwner =
-      'routsourav9777-wq';
+  static const String githubOwner = 'routsourav9777-wq';
 
   static const String githubRepository =
       'bca_department_management';
@@ -43,7 +40,7 @@ class AppUpdateService {
       ValueNotifier<double>(0.0);
 
   // ============================================================
-  // MANUAL CHECK
+  // MANUAL UPDATE CHECK
   // ============================================================
 
   Future<void> checkForUpdate(
@@ -55,7 +52,6 @@ class AppUpdateService {
         'Automatic APK update is available on Android only.',
         error: true,
       );
-
       return;
     }
 
@@ -90,7 +86,6 @@ class AppUpdateService {
 
       if (checkingDialogShown) {
         Navigator.of(context).pop();
-
         checkingDialogShown = false;
       }
 
@@ -98,8 +93,7 @@ class AppUpdateService {
       // COMPARE
       // --------------------------------------------------------
 
-      final int comparison =
-          _compareVersion(
+      final int comparison = _compareVersion(
         release.versionCode,
         currentVersion.versionCode,
       );
@@ -150,7 +144,6 @@ class AppUpdateService {
 
       if (checkingDialogShown) {
         Navigator.of(context).pop();
-
         checkingDialogShown = false;
       }
 
@@ -164,43 +157,34 @@ class AppUpdateService {
   }
 
   // ============================================================
-  // AUTOMATIC CHECK
+  // AUTOMATIC UPDATE CHECK
   // ============================================================
 
-  Future<void> checkForUpdateAutomatically() async {
+  Future<bool> checkForUpdateAutomatically(
+    BuildContext context,
+  ) async {
     if (!Platform.isAndroid) {
-      return;
+      return false;
     }
 
     if (_automaticCheckRunning) {
-      return;
+      return false;
+    }
+
+    if (_updateDialogShowing) {
+      return false;
     }
 
     _automaticCheckRunning = true;
 
     try {
-      // --------------------------------------------------------
-      // WAIT FOR APP UI
-      // --------------------------------------------------------
-
+      // Give Welcome Screen time to render.
       await Future<void>.delayed(
-        const Duration(seconds: 2),
+        const Duration(milliseconds: 800),
       );
 
-      // --------------------------------------------------------
-      // CURRENT CONTEXT
-      // --------------------------------------------------------
-
-      final BuildContext? context =
-          navigatorKey.currentContext;
-
-      if (context == null) {
-        debugPrint(
-          'Update check skipped: '
-          'Navigator context not ready.',
-        );
-
-        return;
+      if (!context.mounted) {
+        return false;
       }
 
       // --------------------------------------------------------
@@ -211,22 +195,21 @@ class AppUpdateService {
           await _getCurrentVersion();
 
       // --------------------------------------------------------
-      // GITHUB RELEASE
+      // GET LATEST GITHUB RELEASE
       // --------------------------------------------------------
 
       final GitHubRelease release =
           await _getLatestGitHubRelease();
 
       if (!context.mounted) {
-        return;
+        return false;
       }
 
       // --------------------------------------------------------
       // COMPARE
       // --------------------------------------------------------
 
-      final int comparison =
-          _compareVersion(
+      final int comparison = _compareVersion(
         release.versionCode,
         currentVersion.versionCode,
       );
@@ -240,16 +223,20 @@ class AppUpdateService {
         '${release.versionCode}',
       );
 
+      // --------------------------------------------------------
+      // UP TO DATE
+      // --------------------------------------------------------
+
       if (comparison <= 0) {
         debugPrint(
           'App is already up to date.',
         );
 
-        return;
+        return false;
       }
 
       // --------------------------------------------------------
-      // DON'T SHOW SAME DISMISSED VERSION AGAIN
+      // SAME UPDATE ALREADY DISMISSED
       // --------------------------------------------------------
 
       if (_lastDismissedVersion ==
@@ -259,12 +246,16 @@ class AppUpdateService {
           '${release.versionName}',
         );
 
-        return;
+        return false;
       }
 
       // --------------------------------------------------------
       // SHOW UPDATE
       // --------------------------------------------------------
+
+      debugPrint(
+        '🚀 NEW UPDATE AVAILABLE',
+      );
 
       await _showUpdateDialog(
         context,
@@ -272,14 +263,15 @@ class AppUpdateService {
         release,
         forceShow: false,
       );
-    } catch (e) {
-      // --------------------------------------------------------
-      // AUTOMATIC CHECK SHOULD NEVER CRASH APP
-      // --------------------------------------------------------
 
+      return true;
+    } catch (e) {
+      // Automatic update must NEVER crash the app.
       debugPrint(
         'Automatic update check error: $e',
       );
+
+      return false;
     } finally {
       _automaticCheckRunning = false;
     }
@@ -315,8 +307,9 @@ class AppUpdateService {
   // ============================================================
 
   Future<GitHubRelease> _getLatestGitHubRelease() async {
-    final Uri uri =
-        Uri.parse(githubApiUrl);
+    final Uri uri = Uri.parse(
+      githubApiUrl,
+    );
 
     final http.Response response =
         await http
@@ -337,8 +330,7 @@ class AppUpdateService {
 
     if (response.statusCode != 200) {
       throw Exception(
-        'GitHub API returned '
-        '${response.statusCode}',
+        'GitHub API returned ${response.statusCode}',
       );
     }
 
@@ -351,17 +343,29 @@ class AppUpdateService {
       );
     }
 
+    // ----------------------------------------------------------
+    // TAG
+    // ----------------------------------------------------------
+
     final String tagName =
         decoded['tag_name']
                 ?.toString()
                 .trim() ??
             '';
 
+    // ----------------------------------------------------------
+    // RELEASE NAME
+    // ----------------------------------------------------------
+
     final String releaseName =
         decoded['name']
                 ?.toString()
                 .trim() ??
             '';
+
+    // ----------------------------------------------------------
+    // RELEASE BODY
+    // ----------------------------------------------------------
 
     final String body =
         decoded['body']
@@ -375,9 +379,9 @@ class AppUpdateService {
       );
     }
 
-    // ==========================================================
+    // ----------------------------------------------------------
     // FIND APK
-    // ==========================================================
+    // ----------------------------------------------------------
 
     String apkUrl = '';
     String apkName = '';
@@ -386,10 +390,8 @@ class AppUpdateService {
         decoded['assets'];
 
     if (assets is List) {
-      for (final dynamic asset
-          in assets) {
-        if (asset
-            is! Map<String, dynamic>) {
+      for (final dynamic asset in assets) {
+        if (asset is! Map<String, dynamic>) {
           continue;
         }
 
@@ -411,7 +413,6 @@ class AppUpdateService {
             downloadUrl.isNotEmpty) {
           apkName = name;
           apkUrl = downloadUrl;
-
           break;
         }
       }
@@ -423,20 +424,23 @@ class AppUpdateService {
       );
     }
 
-    // ==========================================================
+    // ----------------------------------------------------------
     // VERSION
-    // ==========================================================
+    // ----------------------------------------------------------
 
     final String versionName =
-        _cleanVersionName(tagName);
+        _cleanVersionName(
+      tagName,
+    );
 
     final int versionCode =
-        _extractVersionCode(body);
+        _extractVersionCode(
+      body,
+    );
 
     if (versionCode <= 0) {
       throw Exception(
-        'GitHub release does not contain '
-        'a valid versionCode.',
+        'GitHub release does not contain a valid versionCode.',
       );
     }
 
@@ -454,7 +458,7 @@ class AppUpdateService {
   }
 
   // ============================================================
-  // CLEAN VERSION
+  // CLEAN VERSION NAME
   // ============================================================
 
   String _cleanVersionName(
@@ -473,7 +477,7 @@ class AppUpdateService {
   }
 
   // ============================================================
-  // VERSION CODE
+  // EXTRACT VERSION CODE
   // ============================================================
 
   int _extractVersionCode(
@@ -499,7 +503,7 @@ class AppUpdateService {
   }
 
   // ============================================================
-  // COMPARE
+  // COMPARE VERSION
   // ============================================================
 
   int _compareVersion(
@@ -557,8 +561,7 @@ class AppUpdateService {
               title: const Row(
                 children: [
                   Icon(
-                    Icons
-                        .system_update_outlined,
+                    Icons.system_update_rounded,
                     color: Colors.purple,
                     size: 30,
                   ),
@@ -621,13 +624,11 @@ class AppUpdateService {
                       release.apkName,
                     ),
 
-                    if (release
-                        .releaseNotes
+                    if (release.releaseNotes
                         .isNotEmpty) ...[
                       const SizedBox(
                         height: 18,
                       ),
-
                       const Text(
                         "What's New",
                         style: TextStyle(
@@ -636,11 +637,9 @@ class AppUpdateService {
                           fontSize: 15,
                         ),
                       ),
-
                       const SizedBox(
                         height: 7,
                       ),
-
                       Container(
                         width:
                             double.infinity,
@@ -674,30 +673,18 @@ class AppUpdateService {
                 ),
               ),
               actions: [
-                if (!forceShow)
-                  TextButton(
-                    onPressed: () {
-                      _lastDismissedVersion =
-                          release.versionName;
+                TextButton(
+                  onPressed: () {
+                    _lastDismissedVersion =
+                        release.versionName;
 
-                      Navigator.pop(
-                        dialogContext,
-                      );
-                    },
-                    child:
-                        const Text('Later'),
-                  ),
-
-                if (forceShow)
-                  TextButton(
-                    onPressed: () {
-                      Navigator.pop(
-                        dialogContext,
-                      );
-                    },
-                    child:
-                        const Text('Later'),
-                  ),
+                    Navigator.pop(
+                      dialogContext,
+                    );
+                  },
+                  child:
+                      const Text('Later'),
+                ),
 
                 ElevatedButton.icon(
                   onPressed: () {
@@ -711,7 +698,7 @@ class AppUpdateService {
                     );
                   },
                   icon: const Icon(
-                    Icons.download,
+                    Icons.download_rounded,
                   ),
                   label:
                       const Text('Update Now'),
@@ -768,7 +755,7 @@ class AppUpdateService {
   }
 
   // ============================================================
-  // DOWNLOAD + INSTALL
+  // DOWNLOAD AND INSTALL
   // ============================================================
 
   Future<void> _downloadAndInstall(
@@ -844,8 +831,7 @@ class AppUpdateService {
                   ),
                 );
 
-        if (response.statusCode !=
-            200) {
+        if (response.statusCode != 200) {
           throw Exception(
             'APK download failed: '
             '${response.statusCode}',
@@ -855,7 +841,8 @@ class AppUpdateService {
         final int? totalBytes =
             response.contentLength;
 
-        int downloadedBytes = 0;
+        int downloadedBytes =
+            0;
 
         final IOSink sink =
             file.openWrite();
@@ -924,12 +911,11 @@ class AppUpdateService {
 
       if (dialogShown) {
         Navigator.of(context).pop();
-
         dialogShown = false;
       }
 
       // --------------------------------------------------------
-      // OPEN INSTALLER
+      // OPEN ANDROID INSTALLER
       // --------------------------------------------------------
 
       final OpenResult result =
@@ -954,8 +940,7 @@ class AppUpdateService {
         _showMessage(
           context,
           'APK downloaded successfully, '
-          'but Android could not open the installer.\n'
-          'Please install the APK manually.',
+          'but Android could not open the installer.',
           error: true,
         );
       }
@@ -970,7 +955,6 @@ class AppUpdateService {
 
       if (dialogShown) {
         Navigator.of(context).pop();
-
         dialogShown = false;
       }
 
@@ -1008,7 +992,8 @@ class AppUpdateService {
     if (!name
         .toLowerCase()
         .endsWith('.apk')) {
-      name = '$name.apk';
+      name =
+          '$name.apk';
     }
 
     return name;
@@ -1114,7 +1099,7 @@ class AppUpdateService {
                       MainAxisSize.min,
                   children: [
                     const Icon(
-                      Icons.download_outlined,
+                      Icons.download_rounded,
                       size: 50,
                       color:
                           Colors.purple,
@@ -1168,7 +1153,8 @@ class AppUpdateService {
                       ),
                       const Text(
                         'Please do not close the app.',
-                        style: TextStyle(
+                        style:
+                            TextStyle(
                           fontSize: 11,
                           color:
                               Colors.grey,
@@ -1186,7 +1172,7 @@ class AppUpdateService {
   }
 
   // ============================================================
-  // NO UPDATE
+  // NO UPDATE DIALOG
   // ============================================================
 
   void _showNoUpdateDialog(
@@ -1208,7 +1194,8 @@ class AppUpdateService {
             children: [
               Icon(
                 Icons.check_circle_outline,
-                color: Colors.green,
+                color:
+                    Colors.green,
               ),
               SizedBox(width: 10),
               Expanded(
@@ -1266,12 +1253,12 @@ class AppUpdateService {
       ..hideCurrentSnackBar()
       ..showSnackBar(
         SnackBar(
-          content: Text(
-            message,
-          ),
-          backgroundColor: error
-              ? Colors.red.shade700
-              : Colors.green.shade700,
+          content:
+              Text(message),
+          backgroundColor:
+              error
+                  ? Colors.red.shade700
+                  : Colors.green.shade700,
           behavior:
               SnackBarBehavior.floating,
           duration:
